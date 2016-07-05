@@ -57,6 +57,7 @@
       <module fileurl="file://$PROJECT_DIR$/js/js.dart-ast/js.dart-ast.iml" filepath="$PROJECT_DIR$/js/js.dart-ast/js.dart-ast.iml" group="compiler/js" />
       <module fileurl="file://$PROJECT_DIR$/js/js.frontend/js.frontend.iml" filepath="$PROJECT_DIR$/js/js.frontend/js.frontend.iml" group="compiler/js" />
       <module fileurl="file://$PROJECT_DIR$/js/js.inliner/js.inliner.iml" filepath="$PROJECT_DIR$/js/js.inliner/js.inliner.iml" group="compiler/js" />
+      <module fileurl="file://$PROJECT_DIR$/js/js.ir/js.ir.iml" filepath="$PROJECT_DIR$/js/js.ir/js.ir.iml" group="compiler/js" />
       <module fileurl="file://$PROJECT_DIR$/js/js.parser/js.parser.iml" filepath="$PROJECT_DIR$/js/js.parser/js.parser.iml" group="compiler/js" />
       <module fileurl="file://$PROJECT_DIR$/js/js.serializer/js.serializer.iml" filepath="$PROJECT_DIR$/js/js.serializer/js.serializer.iml" group="compiler/js" />
       <module fileurl="file://$PROJECT_DIR$/js/js.tests/js.tests.iml" filepath="$PROJECT_DIR$/js/js.tests/js.tests.iml" group="compiler/js" />
