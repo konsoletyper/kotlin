@@ -14,8 +14,12 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir
+package org.jetbrains.kotlin.js.translate.ir
 
-class JsirVariable(val suggestedName: String? = null)
+import org.jetbrains.kotlin.js.ir.JsirExpression
 
-fun JsirVariable.makeReference() = JsirExpression.VariableReference(this)
+interface VariableAccessor {
+    fun get(): JsirExpression
+
+    fun set(value: JsirExpression)
+}

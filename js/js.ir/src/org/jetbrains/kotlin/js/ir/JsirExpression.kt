@@ -16,16 +16,23 @@
 
 package org.jetbrains.kotlin.js.ir
 
+import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.ConstructorDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 
 sealed class JsirExpression {
+    var source: PsiElement? = null
+
     class Constant(var value: Any) : JsirExpression()
 
     object Null : JsirExpression()
 
     object This : JsirExpression()
+
+    object True : JsirExpression()
+
+    object False : JsirExpression()
 
     class VariableReference(var variable: JsirVariable) : JsirExpression()
 
@@ -50,7 +57,7 @@ sealed class JsirExpression {
             var elseExpression: JsirExpression
     ) : JsirExpression()
 
-    class Logical(var operation: JsirLogicalOperation, var left: JsirExpression, var right: JsirExpression) : JsirExpression()
+    class Binary(var operation: JsirBinaryOperation, var left: JsirExpression, var right: JsirExpression) : JsirExpression()
 
     class Negation(var operand: JsirExpression) : JsirExpression()
 }

@@ -16,7 +16,23 @@
 
 package org.jetbrains.kotlin.js.ir
 
-enum class JsirLogicalOperation {
+enum class JsirBinaryOperation {
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+    REM,
+    BIT_AND,
+    BIT_OR,
+    BIT_XOR,
     AND,
-    OR
+    OR,
+    EQ,
+    NE,
+    REF_EQ,
+    REF_NE,
+    LT,
+    LOE,
+    GT,
+    GOE
 }

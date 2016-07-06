@@ -16,10 +16,14 @@
 
 package org.jetbrains.kotlin.js.ir
 
+import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 
 sealed class JsirStatement {
-    class Assignment(var left: JsirExpression, var right: JsirExpression) : JsirStatement()
+    var source: PsiElement? = null
+
+    class Assignment(var left: JsirExpression?, var right: JsirExpression) : JsirStatement()
 
     class If(var condition: JsirExpression) : JsirStatement() {
         val thenBody = mutableListOf<JsirStatement>()
@@ -45,7 +49,7 @@ sealed class JsirStatement {
         override var suggestedLabelName: String? = null
     }
 
-    class Return(var value: JsirExpression? = null) : JsirStatement()
+    class Return(var value: JsirExpression? = null, var target: FunctionDescriptor) : JsirStatement()
 
     class Throw(var exception: JsirExpression) : JsirStatement()
 
