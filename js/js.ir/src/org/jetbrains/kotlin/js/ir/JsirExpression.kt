@@ -49,6 +49,16 @@ sealed class JsirExpression {
         val arguments = mutableListOf(*arguments)
     }
 
+    class ArrayOf(vararg elements: JsirExpression) : JsirExpression() {
+        val elements = mutableListOf(*elements)
+    }
+
+    class Concat(vararg parts: JsirExpression) : JsirExpression() {
+        val parts = mutableListOf(*parts)
+    }
+
+    class ToString(var value: JsirExpression) : JsirExpression()
+
     class FieldAccess(var receiver: JsirExpression?, var field: JsirField) : JsirExpression()
 
     class Conditional(

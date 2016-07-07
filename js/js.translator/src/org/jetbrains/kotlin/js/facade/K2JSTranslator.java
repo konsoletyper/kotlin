@@ -25,8 +25,11 @@ import org.jetbrains.kotlin.js.analyzer.JsAnalysisResult;
 import org.jetbrains.kotlin.js.config.JsConfig;
 import org.jetbrains.kotlin.js.facade.exceptions.TranslationException;
 import org.jetbrains.kotlin.js.inline.JsInliner;
+import org.jetbrains.kotlin.js.ir.JsirFunction;
+import org.jetbrains.kotlin.js.ir.PrettyPrintKt;
 import org.jetbrains.kotlin.js.translate.context.TranslationContext;
 import org.jetbrains.kotlin.js.translate.general.Translation;
+import org.jetbrains.kotlin.js.translate.ir.JsirGenerator;
 import org.jetbrains.kotlin.progress.ProgressIndicatorAndCompilationCanceledStatus;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.resolve.BindingTrace;
@@ -76,6 +79,15 @@ public final class K2JSTranslator {
         TopDownAnalyzerFacadeForJS.checkForErrors(JsConfig.withJsLibAdded(files, config), bindingTrace.getBindingContext());
         ModuleDescriptor moduleDescriptor = analysisResult.getModuleDescriptor();
         Diagnostics diagnostics = bindingTrace.getBindingContext().getDiagnostics();
+
+        JsirGenerator irGenerator = new JsirGenerator(bindingTrace);
+        for (KtFile file : files) {
+            file.accept(irGenerator, irGenerator.getContext());
+        }
+
+        for (JsirFunction function : irGenerator.getContext().getPool().getFunctions().values()) {
+            System.out.println(PrettyPrintKt.prettyPrint(function));
+        }
 
         TranslationContext context = Translation.generateAst(bindingTrace, files, mainCallParameters, moduleDescriptor, config);
         ProgressIndicatorAndCompilationCanceledStatus.checkCanceled();

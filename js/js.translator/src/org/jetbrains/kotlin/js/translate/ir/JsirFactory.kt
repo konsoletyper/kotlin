@@ -32,6 +32,8 @@ fun JsirContext.memoize(expression: JsirExpression) = when (expression) {
     }
 }
 
+fun JsirContext.memoize(expression: KtExpression) = memoize(generate(expression))
+
 fun JsirExpression.nullCheck() = when (this) {
     is JsirExpression.Null -> JsirExpression.True
 
@@ -42,8 +44,6 @@ fun JsirExpression.nullCheck() = when (this) {
 
     else -> JsirExpression.Binary(JsirBinaryOperation.REF_EQ, this, JsirExpression.Null)
 }
-
-fun JsirContext.translateMemoized(expression: KtExpression) = memoize(translate(expression))
 
 fun JsirContext.assign(left: JsirExpression, right: JsirExpression) {
     append(JsirStatement.Assignment(left, right))

@@ -27,6 +27,7 @@ sealed class JsirStatement {
 
     class If(var condition: JsirExpression) : JsirStatement() {
         val thenBody = mutableListOf<JsirStatement>()
+        val elseBody = mutableListOf<JsirStatement>()
     }
 
     class While(var condition: JsirExpression) : JsirStatement(), JsirLabeled {
@@ -75,7 +76,7 @@ sealed class JsirStatement {
 
     class Switch(var selector: JsirExpression) : JsirStatement(), JsirLabeled {
         val clauses = mutableListOf<Case>()
-        val defaultClause = mutableListOf<JsirExpression>()
+        val defaultClause = mutableListOf<JsirStatement>()
 
         override var suggestedLabelName: String? = null
     }

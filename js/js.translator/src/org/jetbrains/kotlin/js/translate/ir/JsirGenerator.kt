@@ -16,78 +16,30 @@
 
 package org.jetbrains.kotlin.js.translate.ir
 
-import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
+import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.ir.JsirExpression
+import org.jetbrains.kotlin.js.ir.JsirFunction
 import org.jetbrains.kotlin.js.ir.JsirStatement
-import org.jetbrains.kotlin.js.ir.JsirVariable
-import org.jetbrains.kotlin.js.ir.makeReference
 import org.jetbrains.kotlin.js.resolve.diagnostics.ErrorsJs
+import org.jetbrains.kotlin.js.translate.utils.BindingUtils
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getTextWithLocation
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.BindingContextUtils
 import org.jetbrains.kotlin.resolve.BindingTrace
+import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.constants.NullValue
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator
 import org.jetbrains.kotlin.types.TypeUtils
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils.isFunctionExpression
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils.isFunctionLiteral
 
-class JsirGenerator(private var bindingTrace: BindingTrace) : KtVisitor<JsirExpression, JsirContext>() {
-    private var resultingStatements = mutableListOf<JsirStatement>()
-    private lateinit var currentFunction: FunctionDescriptor
-    private lateinit var currentDescriptor: DeclarationDescriptor
-    private var currentClass: ClassDescriptor? = null
-    private var localVariables = mutableMapOf<VariableDescriptor, JsirVariable>()
-    private var currentSource: PsiElement? = null
-
-    private val context: JsirContext = object : JsirContext {
-        override val bindingContext: BindingContext
-            get() = bindingTrace.bindingContext
-
-        override val declaration: DeclarationDescriptor
-            get() = currentDescriptor
-
-        override val function: FunctionDescriptor
-            get() = currentFunction
-
-        override val classDescriptor: ClassDescriptor?
-            get() = currentClass
-
-        override fun append(statement: JsirStatement): JsirContext {
-            resultingStatements.add(statement.apply { source = currentSource })
-            return this
-        }
-
-        override fun <T> withSource(source: PsiElement?, action: () -> T): T {
-            val backup = currentSource
-            return try {
-                currentSource = source
-                action()
-            }
-            finally {
-                currentSource = backup
-            }
-        }
-
-        override fun getVariable(descriptor: VariableDescriptor) = getVariableAccessor(descriptor)
-
-        override fun nestedBlock(body: MutableList<JsirStatement>, action: () -> Unit) {
-            val backup = resultingStatements
-            try {
-                resultingStatements = body
-                action()
-            }
-            finally {
-                resultingStatements = backup
-            }
-        }
-
-        override fun translate(expression: KtExpression): JsirExpression {
-            val visitor = this@JsirGenerator
-            return expression.accept(visitor, visitor.context)
-        }
+class JsirGenerator(private val bindingTrace: BindingTrace) : KtVisitor<JsirExpression, JsirContext>() {
+    val context: JsirMutableContext = JsirMutableContext(bindingTrace) { expr ->
+        val visitor = this
+        expr.accept(this, visitor.context)
     }
 
     override fun visitKtElement(expression: KtElement, context: JsirContext): JsirExpression {
@@ -115,13 +67,27 @@ class JsirGenerator(private var bindingTrace: BindingTrace) : KtVisitor<JsirExpr
         return JsirExpression.Constant(constant.value!!)
     }
 
+    override fun visitStringTemplateExpression(expression: KtStringTemplateExpression, data: JsirContext?): JsirExpression {
+        val constant = BindingUtils.getCompileTimeValue(context.bindingContext, expression) as String?
+        return if (constant != null) {
+            JsirExpression.Constant(constant)
+        }
+        else {
+            val templateGenerator = StringTemplateGenerator(context)
+            for (entry in expression.entries) {
+                entry.accept(templateGenerator)
+            }
+            JsirExpression.Concat(*templateGenerator.parts.toTypedArray())
+        }
+    }
+
     override fun visitBlockExpression(expression: KtBlockExpression, data: JsirContext): JsirExpression {
         return context.withSource(expression) {
             if (expression.statements.isNotEmpty()) {
                 for (statement in expression.statements.dropLast(1)) {
-                    context.translate(statement)
+                    context.generate(statement)
                 }
-                context.translate(expression.statements.last())
+                context.generate(expression.statements.last())
             }
             else {
                 JsirExpression.Null
@@ -132,14 +98,14 @@ class JsirGenerator(private var bindingTrace: BindingTrace) : KtVisitor<JsirExpr
     override fun visitReturnExpression(expression: KtReturnExpression, data: JsirContext): JsirExpression {
         context.withSource(expression) {
             val returnValue = expression.returnedExpression?.accept(this, data)
-            val target = getNonLocalReturnTarget(expression) ?: currentFunction
+            val target = getNonLocalReturnTarget(expression) ?: context.function
             context.append(JsirStatement.Return(returnValue, target))
         }
         return JsirExpression.Null
     }
 
     private fun getNonLocalReturnTarget(expression: KtReturnExpression): FunctionDescriptor? {
-        var descriptor: DeclarationDescriptor? = currentDescriptor
+        var descriptor: DeclarationDescriptor? = context.declaration
         assert(descriptor is CallableMemberDescriptor) { "Return expression can only be inside callable declaration: " +
                                                          "${expression.getTextWithLocation()}" }
         val target = expression.getTargetLabel()
@@ -172,25 +138,50 @@ class JsirGenerator(private var bindingTrace: BindingTrace) : KtVisitor<JsirExpr
         }
     }
 
-    override fun visitBinaryExpression(expression: KtBinaryExpression, data: JsirContext?): JsirExpression {
+    override fun visitBinaryExpression(expression: KtBinaryExpression, data: JsirContext): JsirExpression {
         return context.withSource(expression) {
-            BinaryExpressionJsirGenerator(context).generate(expression)
+            context.generateBinary(expression)
         }
     }
 
-    private fun getVariableAccessor(descriptor: VariableDescriptor): VariableAccessor {
-        val container = descriptor.containingDeclaration
-        if (container !is FunctionDescriptor) {
-            throw IllegalArgumentException("Can only get accessor for local variables. $descriptor is not a local variable")
-        }
+    override fun visitNamedFunction(functionPsi: KtNamedFunction, data: JsirContext): JsirExpression {
+        if (!functionPsi.hasBody()) return JsirExpression.Null
 
-        val localVar = localVariables.getOrPut(descriptor) { JsirVariable(descriptor.name.asString()) }
-        return object : VariableAccessor {
-            override fun get() = localVar.makeReference()
-
-            override fun set(value: JsirExpression) {
-                context.assign(localVar.makeReference(), value)
+        val descriptor = context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, functionPsi] as FunctionDescriptor
+        context.nestedFunction(descriptor) {
+            val function = JsirFunction(descriptor)
+            for (parameter in descriptor.valueParameters) {
+                function.parameters += context.getVariable(parameter).localVariable
             }
+
+            context.nestedBlock(function.body) {
+                val returnValue = context.generate(functionPsi.bodyExpression!!)
+                context.append(JsirStatement.Return(returnValue, descriptor))
+            }
+
+            context.pool.addFunction(descriptor, function)
         }
+
+        return JsirExpression.Null
+    }
+
+    override fun visitKtFile(file: KtFile, data: JsirContext): JsirExpression {
+        for (declaration in file.declarations) {
+            context.generate(declaration)
+        }
+
+        return JsirExpression.Null
+    }
+
+    override fun visitCallExpression(expression: KtCallExpression, data: JsirContext?): JsirExpression {
+        val resolvedCall = expression.getResolvedCall(context.bindingContext)!!
+        val callee = expression.calleeExpression!!
+        val qualifier = if (callee is KtDotQualifiedExpression) {
+            callee.receiverExpression
+        }
+        else {
+            null
+        }
+        return context.generateInvocation(qualifier, resolvedCall)
     }
 }

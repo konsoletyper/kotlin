@@ -2,6 +2,48 @@
 
 package foo
 
+class RouterContext(val test: String) {
+
+
+}
+
+class Route(val segment: String, val parent: Route?, val children: MutableMap<String, Route>, var callback: (RouterContext.() -> Unit)?) {
+
+
+}
+
+class Router {
+    private val routes = Route("/", null, mutableMapOf(), null)
+
+    fun addRoute(path: String, vararg callbacks: RouterContext.() -> Unit) {
+        var parent = routes
+        var child: Route? = null
+
+        path.split("/").filter { it != "" }.forEach {
+            child = Route(it, parent, mutableMapOf(), null)
+            parent.children[it] = child!!
+            parent = child!!
+        }
+
+        child?.callback = callbacks.first()
+    }
+
+    fun exec(path: String) {
+        val splittedPath = path.split("?")
+        val segments = splittedPath.getOrNull(0)
+        val queryParams = splittedPath.getOrNull(1)
+
+        var route: Route? = routes
+
+        segments?.split("/")?.filter { it != "" }?.forEach {
+            route = route?.children?.get(it)
+        }
+
+        val context = RouterContext("you")
+        route?.callback?.invoke(context)
+    }
+}
+
 class Foo() {
     companion object {
         val bar = "Foo.bar ";
@@ -34,6 +76,16 @@ class Foo() {
 }
 
 fun box(): String {
+    val router = Router()
+
+    router.addRoute("/hello/world", {
+        val name = test
+
+        println("Hello $name")
+    })
+
+    router.exec("/hello/world")
+
     assertEquals("Foo.baz() Foo.bar Implicit", Foo.testImplicitThis(), "testImplicitThis")
     assertEquals("Foo.baz() Foo.bar Explicit", Foo.testExplicitThis(), "testExplicitThis")
 

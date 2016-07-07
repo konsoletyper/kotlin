@@ -14,10 +14,17 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.translate.ir
+package org.jetbrains.kotlin.js.ir
 
-import org.jetbrains.kotlin.psi.KtExpression
+import org.jetbrains.kotlin.descriptors.CallableDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 
-class ReceiverGenerator(private val context: JsirContext) {
-    fun generate(receiverPsi: KtExpression)
+class JsirPool {
+    private val functionMap = mutableMapOf<CallableDescriptor, JsirFunction>()
+
+    val functions: Map<CallableDescriptor, JsirFunction> = functionMap
+
+    fun addFunction(descriptor: CallableDescriptor, function: JsirFunction) {
+        functionMap[descriptor] = function
+    }
 }

@@ -17,11 +17,9 @@
 package org.jetbrains.kotlin.js.translate.ir
 
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
-import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.descriptors.VariableDescriptor
+import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.ir.JsirExpression
+import org.jetbrains.kotlin.js.ir.JsirPool
 import org.jetbrains.kotlin.js.ir.JsirStatement
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.resolve.BindingContext
@@ -35,13 +33,17 @@ interface JsirContext {
 
     val classDescriptor: ClassDescriptor?
 
+    val pool: JsirPool
+
     fun getVariable(descriptor: VariableDescriptor): VariableAccessor
 
     fun append(statement: JsirStatement): JsirContext
 
     fun nestedBlock(body: MutableList<JsirStatement>, action: () -> Unit)
 
+    fun nestedFunction(function: FunctionDescriptor, action: () -> Unit)
+
     fun <T> withSource(source: PsiElement?, action: () -> T): T
 
-    fun translate(expression: KtExpression): JsirExpression
+    fun generate(expression: KtExpression): JsirExpression
 }
