@@ -304,7 +304,7 @@ private class SourceWriter {
         var index = 0
         var variableName = variableNameBase
         while (!usedVariables.add(variableName)) {
-            variableName = "$variableNameBase ${index++}"
+            variableName = "${variableNameBase}_${index++}"
         }
         variableName
     }

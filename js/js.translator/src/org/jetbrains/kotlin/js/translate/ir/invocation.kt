@@ -23,11 +23,17 @@ import org.jetbrains.kotlin.js.ir.JsirExpression
 import org.jetbrains.kotlin.js.ir.JsirField
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
+import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall
 import org.jetbrains.kotlin.resolve.scopes.receivers.ExpressionReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
 
 fun JsirContext.generateInvocation(receiverPsi: KtExpression?, resolvedCall: ResolvedCall<*>): JsirExpression {
+    val descriptor = resolvedCall.resultingDescriptor
+    if (descriptor is VariableDescriptor && descriptor.containingDeclaration == function) {
+        return getVariable(descriptor).get()
+    }
+
     val (receiverExpr, extensionExpr) = generateReceiver(receiverPsi, resolvedCall)
     val args = extensionExpr?.let { listOf(it) }.orEmpty() + generateArguments(resolvedCall)
 
@@ -35,9 +41,9 @@ fun JsirContext.generateInvocation(receiverPsi: KtExpression?, resolvedCall: Res
 }
 
 private fun JsirContext.generateArguments(resolvedCall: ResolvedCall<*>): List<JsirExpression> {
-    if (function.valueParameters.isEmpty()) return emptyList()
-
     val function = resolvedCall.resultingDescriptor
+    if (function?.valueParameters?.isEmpty() ?: false) return emptyList()
+
     val arguments = resolvedCall.valueArgumentsByIndex!!
     return function.valueParameters.map { parameter ->
         val argument = arguments[parameter.index]
@@ -71,6 +77,10 @@ fun JsirContext.generateVariable(receiverPsi: KtExpression, resolvedCall: Resolv
 fun JsirContext.generateReceiver(receiverPsi: KtExpression?, resolvedCall: ResolvedCall<*>): Pair<JsirExpression?, JsirExpression?> {
     val dispatchReceiver = resolvedCall.dispatchReceiver
     val extensionReceiver = resolvedCall.extensionReceiver
+
+    if (resolvedCall is VariableAsFunctionResolvedCall) {
+        return generateReceiver(receiverPsi, resolvedCall.variableCall)
+    }
 
     return when {
         dispatchReceiver != null -> Pair(generateMainReceiver(receiverPsi, dispatchReceiver),

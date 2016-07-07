@@ -44,9 +44,9 @@ private fun JsirContext.translateElvis(leftPsi: KtExpression, rightPsi: KtExpres
 }
 
 private fun JsirContext.translateAssignment(psi: KtBinaryExpression) {
+    val call = psi.getResolvedCall(bindingContext) ?: return translateSimpleAssignment(psi)
     val leftPsi = psi.left!!
     val rightPsi = psi.right!!
-    val call = psi.getResolvedCall(bindingContext)!!
 
     if (BindingUtils.isVariableReassignment(bindingContext, psi)) {
         val variable = generateVariable(leftPsi, call)
@@ -55,6 +55,20 @@ private fun JsirContext.translateAssignment(psi: KtBinaryExpression) {
     else {
         val left = memoize(leftPsi)
         JsirExpression.Invocation(left, call.resultingDescriptor, true, generate(rightPsi))
+    }
+}
+
+private fun JsirContext.translateSimpleAssignment(psi: KtBinaryExpression) {
+    val left = memoize(psi.left!!)
+    val right = generate(psi.right!!)
+    val psiOperation = PsiUtils.getOperationToken(psi)
+
+    when (psiOperation) {
+        KtTokens.EQ -> {
+            assign(left, right)
+            return
+        }
+        else -> error("Unexpected operation $psiOperation")
     }
 }
 
