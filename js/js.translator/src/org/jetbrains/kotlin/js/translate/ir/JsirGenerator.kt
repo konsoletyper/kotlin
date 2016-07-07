@@ -17,10 +17,7 @@
 package org.jetbrains.kotlin.js.translate.ir
 
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
-import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
-import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.descriptors.VariableDescriptor
+import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.ir.JsirExpression
 import org.jetbrains.kotlin.js.ir.JsirStatement
 import org.jetbrains.kotlin.js.ir.JsirVariable
@@ -41,6 +38,7 @@ class JsirGenerator(private var bindingTrace: BindingTrace) : KtVisitor<JsirExpr
     private var resultingStatements = mutableListOf<JsirStatement>()
     private lateinit var currentFunction: FunctionDescriptor
     private lateinit var currentDescriptor: DeclarationDescriptor
+    private var currentClass: ClassDescriptor? = null
     private var localVariables = mutableMapOf<VariableDescriptor, JsirVariable>()
     private var currentSource: PsiElement? = null
 
@@ -53,6 +51,9 @@ class JsirGenerator(private var bindingTrace: BindingTrace) : KtVisitor<JsirExpr
 
         override val function: FunctionDescriptor
             get() = currentFunction
+
+        override val classDescriptor: ClassDescriptor?
+            get() = currentClass
 
         override fun append(statement: JsirStatement): JsirContext {
             resultingStatements.add(statement.apply { source = currentSource })
@@ -172,17 +173,19 @@ class JsirGenerator(private var bindingTrace: BindingTrace) : KtVisitor<JsirExpr
     }
 
     override fun visitBinaryExpression(expression: KtBinaryExpression, data: JsirContext?): JsirExpression {
-        return super.visitBinaryExpression(expression, data)
+        return context.withSource(expression) {
+            BinaryExpressionJsirGenerator(context).generate(expression)
+        }
     }
 
     private fun getVariableAccessor(descriptor: VariableDescriptor): VariableAccessor {
         val container = descriptor.containingDeclaration
         if (container !is FunctionDescriptor) {
-            throw IllegalArgumentException("Can only get accessor for local variables. ${descriptor} is not a local variable")
+            throw IllegalArgumentException("Can only get accessor for local variables. $descriptor is not a local variable")
         }
 
         val localVar = localVariables.getOrPut(descriptor) { JsirVariable(descriptor.name.asString()) }
-        object : VariableAccessor {
+        return object : VariableAccessor {
             override fun get() = localVar.makeReference()
 
             override fun set(value: JsirExpression) {

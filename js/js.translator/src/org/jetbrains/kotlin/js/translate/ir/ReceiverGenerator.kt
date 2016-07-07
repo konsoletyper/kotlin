@@ -16,20 +16,8 @@
 
 package org.jetbrains.kotlin.js.translate.ir
 
-import org.jetbrains.kotlin.js.ir.JsirExpression
 import org.jetbrains.kotlin.psi.KtExpression
-import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
-import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
 
-class ResolvedCallJsirGenerator(context: JsirContext) {
-    fun generate(resolvedCall: ResolvedCall<*>) {
-        val descriptor = resolvedCall.resultingDescriptor
-        val dispatchReceiver = resolvedCall.dispatchReceiver
-        val extensionReceiver = resolvedCall.extensionReceiver
-        val arguments = mutableListOf<JsirExpression>()
-    }
-
-    private fun translateReceiver(psi: KtExpression?, receiver: ReceiverValue): JsirExpression {
-        receiver
-    }
+class ReceiverGenerator(private val context: JsirContext) {
+    fun generate(receiverPsi: KtExpression)
 }

@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.js.translate.ir
 
 import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.VariableDescriptor
@@ -31,6 +32,8 @@ interface JsirContext {
     val declaration: DeclarationDescriptor
 
     val function: FunctionDescriptor
+
+    val classDescriptor: ClassDescriptor?
 
     fun getVariable(descriptor: VariableDescriptor): VariableAccessor
 

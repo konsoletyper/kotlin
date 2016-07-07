@@ -16,20 +16,18 @@
 
 package org.jetbrains.kotlin.js.translate.ir
 
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.js.ir.JsirExpression
-import org.jetbrains.kotlin.psi.KtExpression
-import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
-import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
+import org.jetbrains.kotlin.js.ir.JsirField
 
-class ResolvedCallJsirGenerator(context: JsirContext) {
-    fun generate(resolvedCall: ResolvedCall<*>) {
-        val descriptor = resolvedCall.resultingDescriptor
-        val dispatchReceiver = resolvedCall.dispatchReceiver
-        val extensionReceiver = resolvedCall.extensionReceiver
-        val arguments = mutableListOf<JsirExpression>()
-    }
-
-    private fun translateReceiver(psi: KtExpression?, receiver: ReceiverValue): JsirExpression {
-        receiver
+class ThisGenerator(private val context: JsirContext) {
+    fun generate(descriptor: ClassDescriptor): JsirExpression {
+        var result: JsirExpression = JsirExpression.This
+        var currentClass = context.classDescriptor!!
+        while (currentClass != descriptor) {
+            result = JsirExpression.FieldAccess(result, JsirField.OuterClass(currentClass))
+            currentClass = currentClass.containingDeclaration as ClassDescriptor
+        }
+        return result
     }
 }

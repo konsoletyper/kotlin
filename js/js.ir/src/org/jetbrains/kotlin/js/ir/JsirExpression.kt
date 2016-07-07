@@ -49,7 +49,7 @@ sealed class JsirExpression {
         val arguments = mutableListOf(*arguments)
     }
 
-    class FieldAccess(var receiver: JsirExpression?, var field: PropertyDescriptor) : JsirExpression()
+    class FieldAccess(var receiver: JsirExpression?, var field: JsirField) : JsirExpression()
 
     class Conditional(
             var condition: JsirExpression,
