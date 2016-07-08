@@ -26,7 +26,7 @@ import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.types.expressions.OperatorConventions
 
-fun JsirContext.generateBinary(expression: KtBinaryExpression): JsirExpression {
+internal fun JsirContext.generateBinary(expression: KtBinaryExpression): JsirExpression {
     val operation = PsiUtils.getOperationToken(expression)
     return when {
         operation == KtTokens.ELVIS -> translateElvis(expression.left!!, expression.right!!)
@@ -49,7 +49,7 @@ private fun JsirContext.translateAssignment(psi: KtBinaryExpression) {
     val rightPsi = psi.right!!
 
     if (BindingUtils.isVariableReassignment(bindingContext, psi)) {
-        val variable = generateVariable(leftPsi, call)
+        val variable = generateVariable(leftPsi)
         variable.set(JsirExpression.Invocation(variable.get(), call.resultingDescriptor, true, generate(rightPsi)))
     }
     else {
@@ -59,13 +59,13 @@ private fun JsirContext.translateAssignment(psi: KtBinaryExpression) {
 }
 
 private fun JsirContext.translateSimpleAssignment(psi: KtBinaryExpression) {
-    val left = memoize(psi.left!!)
+    val left = generateVariable(psi.left!!)
     val right = generate(psi.right!!)
     val psiOperation = PsiUtils.getOperationToken(psi)
 
     when (psiOperation) {
         KtTokens.EQ -> {
-            assign(left, right)
+            left.set(right)
             return
         }
         else -> error("Unexpected operation $psiOperation")

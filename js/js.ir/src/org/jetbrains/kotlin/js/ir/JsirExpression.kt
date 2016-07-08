@@ -70,4 +70,8 @@ sealed class JsirExpression {
     class Binary(var operation: JsirBinaryOperation, var left: JsirExpression, var right: JsirExpression) : JsirExpression()
 
     class Negation(var operand: JsirExpression) : JsirExpression()
+
+    class UnaryMinus(var operand: JsirExpression) : JsirExpression()
+
+    class NewNullPointerExpression : JsirExpression()
 }

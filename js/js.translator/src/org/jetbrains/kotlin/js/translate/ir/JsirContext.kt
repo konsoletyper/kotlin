@@ -30,6 +30,7 @@ class JsirContext(val bindingTrace: BindingTrace, val generator: (KtExpression) 
     private var declaredLocalVariables = mutableSetOf<VariableDescriptor>()
     private var currentSource: PsiElement? = null
     private val labeledStatements = mutableMapOf<String, JsirLabeled>()
+    private val continueReplacementsImpl = mutableMapOf<JsirLabeled, JsirLabeled>()
 
     val bindingContext: BindingContext
         get() = bindingTrace.bindingContext
@@ -54,11 +55,26 @@ class JsirContext(val bindingTrace: BindingTrace, val generator: (KtExpression) 
         get
         private set
 
+    val continueReplacements: Map<JsirLabeled, JsirLabeled>
+        get() = continueReplacements
+
     val pool = JsirPool()
 
     fun append(statement: JsirStatement): JsirContext {
+        if (resultingStatements.isNotEmpty() && isTerminalStatement(resultingStatements.last())) {
+            return this
+        }
+
         resultingStatements.add(statement.apply { source = currentSource })
         return this
+    }
+
+    private fun isTerminalStatement(statement: JsirStatement) = when (statement) {
+        is JsirStatement.Return,
+        is JsirStatement.Break,
+        is JsirStatement.Continue,
+        is JsirStatement.Throw -> true
+        else -> false
     }
 
     fun <T> withSource(source: PsiElement?, action: () -> T): T {
@@ -149,9 +165,17 @@ class JsirContext(val bindingTrace: BindingTrace, val generator: (KtExpression) 
         }
     }
 
-    fun getLabelTarget(psi: KtSimpleNameExpression) {
-        labeledStatements[psi.getReferencedName()]!!
+    fun withContinueReplacement(statement: JsirLabeled, replacement: JsirLabeled, action: () -> Unit) {
+        continueReplacementsImpl[statement] = replacement
+        try {
+            action()
+        }
+        finally {
+            continueReplacementsImpl.keys -= statement
+        }
     }
+
+    fun getLabelTarget(psi: KtSimpleNameExpression) = labeledStatements[psi.getReferencedName()]!!
 
     fun generate(expression: KtExpression) = generator(expression)
 

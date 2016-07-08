@@ -50,5 +50,50 @@ fun JsirContext.assign(left: JsirExpression, right: JsirExpression) {
 }
 
 fun JsirContext.append(expression: JsirExpression) {
-    append(JsirStatement.Assignment(null, expression))
+    when (expression) {
+        is JsirExpression.Null,
+        is JsirExpression.True,
+        is JsirExpression.False,
+        is JsirExpression.Constant,
+        is JsirExpression.VariableReference -> {}
+        else -> append(JsirStatement.Assignment(null, expression))
+    }
+}
+
+fun JsirExpression.negate(): JsirExpression = when (this) {
+    is JsirExpression.Negation -> operand
+    is JsirExpression.True -> JsirExpression.False
+    is JsirExpression.False -> JsirExpression.True
+    is JsirExpression.Binary -> {
+        val negatedOperation = operation.negate()
+        if (negatedOperation != null) {
+            JsirExpression.Binary(negatedOperation, left, right)
+        }
+        else {
+            JsirExpression.Negation(this)
+        }
+    }
+    else -> JsirExpression.Negation(this)
+}
+
+fun JsirBinaryOperation.negate(): JsirBinaryOperation? = when (this) {
+    JsirBinaryOperation.REF_EQ -> JsirBinaryOperation.REF_NE
+    JsirBinaryOperation.REF_NE -> JsirBinaryOperation.REF_EQ
+    JsirBinaryOperation.EQ -> JsirBinaryOperation.NE
+    JsirBinaryOperation.NE -> JsirBinaryOperation.EQ
+    JsirBinaryOperation.GT -> JsirBinaryOperation.LOE
+    JsirBinaryOperation.GOE -> JsirBinaryOperation.LT
+    JsirBinaryOperation.LT -> JsirBinaryOperation.GOE
+    JsirBinaryOperation.LOE -> JsirBinaryOperation.GT
+    else -> null
+}
+
+fun JsirContext.requireNonNull(value: JsirExpression): JsirExpression {
+    val memoized = memoize(value)
+    val statement = JsirStatement.If(memoized.nullCheck())
+    append(statement)
+    nestedBlock(statement.thenBody) {
+        append(JsirStatement.Throw(JsirExpression.NewNullPointerExpression()))
+    }
+    return memoized
 }

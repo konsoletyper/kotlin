@@ -183,7 +183,12 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
         }
     }
     is JsirExpression.Negation -> {
-        writer.block("-unary") {
+        writer.block("!") {
+            operand.prettyPrint(writer)
+        }
+    }
+    is JsirExpression.UnaryMinus -> {
+        writer.block("unary-minus") {
             operand.prettyPrint(writer)
         }
     }
@@ -223,8 +228,20 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
             value.prettyPrint(writer)
         }
     }
+    is JsirExpression.NewNullPointerExpression -> {
+        writer.constant("kotlin-NPE")
+    }
 
-    is JsirExpression.Constant -> writer.constant(value.toString())
+    is JsirExpression.Constant -> {
+        val value = this.value
+        writer.constant(when (value) {
+            is String -> {
+                "\"$value\""
+            }
+            else -> value.toString()
+        })
+    }
+
     is JsirExpression.Null -> writer.constant("null")
     is JsirExpression.This -> writer.constant("this")
     is JsirExpression.True -> writer.constant("true")
@@ -294,7 +311,7 @@ private class SourceWriter {
         var index = 0
         var label = labelBase
         while (!usedLabels.add(label)) {
-            label = "$labelBase ${index++}"
+            label = "${labelBase}_${index++}"
         }
         label
     }
