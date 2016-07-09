@@ -257,10 +257,6 @@ public abstract class AbstractModelBuilderTest {
       String envRepoUrl = System.getenv(isSnapshotUrl ? SNAPSHOT_REPOSITORY_ENV : RELEASE_REPOSITORY_ENV);
       if (envRepoUrl != null) return envRepoUrl;
 
-      if (UsefulTestCase.IS_UNDER_TEAMCITY) {
-        return isSnapshotUrl ? INTELLIJ_LABS_GRADLE_SNAPSHOT_MIRROR : INTELLIJ_LABS_GRADLE_RELEASE_MIRROR;
-      }
-
       return isSnapshotUrl ? GRADLE_SNAPSHOT_REPO : GRADLE_RELEASE_REPO;
     }
   }
