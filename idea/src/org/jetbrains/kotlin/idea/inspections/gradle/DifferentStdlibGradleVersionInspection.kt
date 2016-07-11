@@ -35,7 +35,7 @@ class DifferentStdlibGradleVersionInspection : GradleBaseInspection() {
     override fun buildErrorString(vararg args: Any) =
             "Plugin version (${args[0]}) is not the same as library version (${args[1]})"
 
-    private inner class MyVisitor : KotlinGradleInspectionUtil() {
+    private inner class MyVisitor : KotlinGradleInspectionVisitor() {
         override fun visitClosure(closure: GrClosableBlock) {
             super.visitClosure(closure)
 
@@ -77,7 +77,7 @@ class DifferentStdlibGradleVersionInspection : GradleBaseInspection() {
             val projectStructureNode = findGradleProjectStructure(file) ?: return null
             val module = ProjectRootManager.getInstance(file.project).fileIndex.getModuleForFile(file.virtualFile) ?: return null
 
-            for (moduleData in projectStructureNode.findAll(ProjectKeys.MODULE).filter { it.data.externalName == module.name }) {
+            for (moduleData in projectStructureNode.findAll(ProjectKeys.MODULE).filter { it.data.internalName == module.name }) {
                 for (sourceSetData in moduleData.node.findAll(GradleSourceSetData.KEY).filter { it.data.internalName.endsWith("main") }) {
                     for (libraryDependencyData in sourceSetData.node.findAll(ProjectKeys.LIBRARY_DEPENDENCY)) {
                         if (libraryDependencyData.data.externalName.startsWith(libraryNameMarker)) {
