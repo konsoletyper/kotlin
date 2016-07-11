@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.translate.ir
+package org.jetbrains.kotlin.js.ir.translate
 
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
@@ -50,8 +50,13 @@ private fun JsirContext.generateArguments(resolvedCall: ResolvedCall<*>): List<J
     val arguments = resolvedCall.valueArgumentsByIndex!!
     return function.valueParameters.map { parameter ->
         val argument = arguments[parameter.index]
-        if (parameter.varargElementType != null) {
-            memoize(argument.arguments[0].getArgumentExpression()!!)
+        if (parameter.varargElementType == null) {
+            if (argument.arguments.isNotEmpty()) {
+                memoize(argument.arguments[0].getArgumentExpression()!!)
+            }
+            else {
+                JsirExpression.Undefined
+            }
         }
         else {
             JsirExpression.ArrayOf(*argument.arguments.map { memoize(it.getArgumentExpression()!!) }.toTypedArray())

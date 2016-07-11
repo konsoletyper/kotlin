@@ -16,15 +16,24 @@
 
 package org.jetbrains.kotlin.js.ir
 
-import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.descriptors.ModuleDescriptor
+import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 
-class JsirPool {
-    private val functionMap = mutableMapOf<CallableDescriptor, JsirFunction>()
+class JsirPool(val module: ModuleDescriptor) {
+    private val functionMap = mutableMapOf<FunctionDescriptor, JsirFunction>()
 
-    val functions: Map<CallableDescriptor, JsirFunction> = functionMap
+    val functions: Map<FunctionDescriptor, JsirFunction> = functionMap
 
-    fun addFunction(descriptor: CallableDescriptor, function: JsirFunction) {
+    private val propertySet = mutableSetOf<PropertyDescriptor>()
+
+    val properties: Set<PropertyDescriptor> = propertySet
+
+    fun addFunction(descriptor: FunctionDescriptor, function: JsirFunction) {
         functionMap[descriptor] = function
+    }
+
+    fun addProperty(property: PropertyDescriptor) {
+        propertySet += property
     }
 }

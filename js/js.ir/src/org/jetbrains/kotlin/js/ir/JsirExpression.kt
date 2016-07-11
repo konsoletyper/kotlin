@@ -34,6 +34,8 @@ sealed class JsirExpression {
 
     object False : JsirExpression()
 
+    object Undefined : JsirExpression()
+
     class VariableReference(var variable: JsirVariable) : JsirExpression()
 
     class Invocation(

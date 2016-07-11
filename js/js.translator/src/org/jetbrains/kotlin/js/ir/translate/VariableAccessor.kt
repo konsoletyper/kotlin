@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.translate.ir
+package org.jetbrains.kotlin.js.ir.translate
 
 import org.jetbrains.kotlin.js.ir.JsirExpression
 

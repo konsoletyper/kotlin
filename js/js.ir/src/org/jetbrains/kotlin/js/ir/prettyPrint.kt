@@ -242,6 +242,7 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
         })
     }
 
+    is JsirExpression.Undefined -> writer.constant("undefined")
     is JsirExpression.Null -> writer.constant("null")
     is JsirExpression.This -> writer.constant("this")
     is JsirExpression.True -> writer.constant("true")

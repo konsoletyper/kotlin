@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.translate.ir
+package org.jetbrains.kotlin.js.ir.translate
 
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.descriptors.*
@@ -24,7 +24,7 @@ import org.jetbrains.kotlin.psi.KtSimpleNameExpression
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.BindingTrace
 
-class JsirContext(val bindingTrace: BindingTrace, val generator: (KtExpression) -> JsirExpression) {
+class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val generator: (KtExpression) -> JsirExpression) {
     private var resultingStatements = mutableListOf<JsirStatement>()
     private val localVariables = mutableMapOf<VariableDescriptor, JsirVariable>()
     private var declaredLocalVariables = mutableSetOf<VariableDescriptor>()
@@ -58,7 +58,7 @@ class JsirContext(val bindingTrace: BindingTrace, val generator: (KtExpression) 
     val continueReplacements: Map<JsirLabeled, JsirLabeled>
         get() = continueReplacements
 
-    val pool = JsirPool()
+    val pool = JsirPool(module)
 
     fun append(statement: JsirStatement): JsirContext {
         if (resultingStatements.isNotEmpty() && isTerminalStatement(resultingStatements.last())) {

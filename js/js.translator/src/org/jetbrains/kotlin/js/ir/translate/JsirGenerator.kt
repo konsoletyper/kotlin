@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.translate.ir
+package org.jetbrains.kotlin.js.ir.translate
 
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.ir.*
@@ -32,8 +32,8 @@ import org.jetbrains.kotlin.types.TypeUtils
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils.isFunctionExpression
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils.isFunctionLiteral
 
-class JsirGenerator(private val bindingTrace: BindingTrace) : KtVisitor<JsirExpression, JsirContext>() {
-    val context: JsirContext = JsirContext(bindingTrace) { expr ->
+class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescriptor) : KtVisitor<JsirExpression, JsirContext>() {
+    val context: JsirContext = JsirContext(bindingTrace, module) { expr ->
         val visitor = this
         expr.accept(this, visitor.context)
     }
