@@ -46,7 +46,7 @@ class DifferentKotlinGradleVersionInspection : GradleBaseInspection() {
         return "Kotlin version that is used for building with Gradle (${args[0]}) differs from the one bundled into the IDE plugin (${args[1]})"
     }
 
-    private inner class MyVisitor : KotlinGradleInspectionUtil() {
+    private inner class MyVisitor : KotlinGradleInspectionVisitor() {
         private val idePluginVersion by lazy { bundledRuntimeVersion() }
 
         override fun visitClosure(closure: GrClosableBlock) {

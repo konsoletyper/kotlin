@@ -36,7 +36,7 @@ import org.jetbrains.plugins.groovy.lang.psi.GroovyFileBase
 val KOTLIN_PLUGIN_CLASSPATH_MARKER = "${KotlinWithGradleConfigurator.GROUP_ID}:${KotlinWithGradleConfigurator.GRADLE_PLUGIN_ID}:"
 val KOTLIN_PLUGIN_PATH_MARKER = "${KotlinWithGradleConfigurator.GROUP_ID}/${KotlinWithGradleConfigurator.GRADLE_PLUGIN_ID}/"
 
-abstract class KotlinGradleInspectionUtil : BaseInspectionVisitor() {
+abstract class KotlinGradleInspectionVisitor : BaseInspectionVisitor() {
     override fun visitFile(file: GroovyFileBase?) {
         if (file == null || !FileUtilRt.extensionEquals(file.name, GradleConstants.EXTENSION)) return
 
@@ -61,7 +61,7 @@ fun getResolvedKotlinGradleVersion(file: PsiFile): String? {
     val projectInfo = ExternalSystemUtil.getExternalProjectInfo(project, GRADLE_SYSTEM_ID, projectPath) ?: return null
     val projectStructureNode = projectInfo.externalProjectStructure ?: return null
 
-    for (moduleData in projectStructureNode.findAll(ProjectKeys.MODULE).filter { it.data.externalName == module.name }) {
+    for (moduleData in projectStructureNode.findAll(ProjectKeys.MODULE).filter { it.data.internalName == module.name }) {
         val buildScriptClasspathData = moduleData.node.findAll(BuildScriptClasspathData.KEY).firstOrNull()?.data ?: continue
         val kotlinPluginVersion = findKotlinPluginVersion(buildScriptClasspathData)
         if (kotlinPluginVersion != null) {
