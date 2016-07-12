@@ -44,10 +44,10 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     override fun visitConstantExpression(expression: KtConstantExpression, context: JsirContext): JsirExpression {
-        return translateConstantExpression(expression, context).apply { source = expression }
+        return generateConstantExpression(expression, context).apply { source = expression }
     }
 
-    private fun translateConstantExpression(expression: KtConstantExpression, context: JsirContext): JsirExpression {
+    private fun generateConstantExpression(expression: KtConstantExpression, context: JsirContext): JsirExpression {
         val compileTimeValue = ConstantExpressionEvaluator.getConstant(expression, context.bindingContext) ?:
                                error("Expression is not compile time value: " + expression.getTextWithLocation() + " ")
         val expectedType = context.bindingContext.getType(expression)
@@ -67,6 +67,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             for (entry in expression.entries) {
                 entry.accept(templateGenerator)
             }
+            templateGenerator.flush()
             JsirExpression.Concat(*templateGenerator.parts.toTypedArray())
         }
     }
@@ -191,12 +192,14 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
 
     override fun visitProperty(property: KtProperty, data: JsirContext): JsirExpression {
         val descriptor = context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, property]
-        return if (context.declaration is FunctionDescriptor) {
-            return context.getVariable(descriptor as VariableDescriptor).get()
+        if (context.declaration is FunctionDescriptor) {
+            val variable = descriptor as VariableDescriptor
+            val initializer = property.initializer
+            if (initializer != null) {
+                context.getVariable(variable).set(context.generate(initializer))
+            }
         }
-        else {
-            JsirExpression.Null
-        }
+        return JsirExpression.Null
     }
 
     override fun visitIfExpression(expression: KtIfExpression, data: JsirContext): JsirExpression {
@@ -222,7 +225,6 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     override fun visitDoWhileExpression(expression: KtDoWhileExpression, data: JsirContext): JsirExpression {
         context.withSource(expression) {
             val statement = JsirStatement.DoWhile(JsirExpression.True)
-            context.append(statement)
             context.nestedLabel(null, statement, true) {
                 context.nestedBlock(statement.body) {
                     val block = JsirStatement.Block()
@@ -241,6 +243,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                     }
                 }
             }
+            context.append(statement)
         }
 
         return JsirExpression.Null

@@ -45,6 +45,10 @@ sealed class JsirExpression {
         val arguments = mutableListOf(*arguments)
     }
 
+    class Application(var function: JsirExpression, vararg arguments: JsirExpression) : JsirExpression() {
+        val arguments = mutableListOf(*arguments)
+    }
+
     class NewInstance(var constructor: ConstructorDescriptor, vararg arguments: JsirExpression) : JsirExpression() {
         val arguments = mutableListOf(*arguments)
     }

@@ -21,7 +21,11 @@ import org.jetbrains.kotlin.js.ir.*
 import org.jetbrains.kotlin.js.ir.transform.Transformation
 
 class IntrinsicsTransformation : Transformation {
-    private val intrinsics = listOf(PrimitivesIntrinsic(), ArraysIntrinsic())
+    private val intrinsics = listOf(
+            PrimitivesIntrinsic(),
+            ArraysIntrinsic(),
+            InvokeIntrinsic()
+    )
     private val intrinsicCache = mutableMapOf<Pair<FunctionDescriptor, Boolean>, Intrinsic?>()
 
     override fun apply(function: JsirFunction) {

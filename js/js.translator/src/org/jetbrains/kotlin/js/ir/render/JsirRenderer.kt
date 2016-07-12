@@ -37,9 +37,9 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.ir.*
 import org.jetbrains.kotlin.js.translate.context.Namer
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
+import org.jetbrains.kotlin.psi.psiUtil.getTextWithLocation
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
-import org.jetbrains.kotlin.resolve.descriptorUtil.module
 
 object JsirRenderer {
     fun render(pool: JsirPool): JsProgram {
@@ -60,7 +60,7 @@ private class JsirRendererImpl(val pool: JsirPool) {
         for (function in pool.functions.values) {
             wrapperFunction.body.statements += FunctionRenderer(function).render().makeStmt()
         }
-        program.globalBlock.statements += importsSection.statements
+        wrapperFunction.body.statements.addAll(0, importsSection.statements)
         program.globalBlock.statements += JsExpressionStatement(wrapperFunction)
     }
 
@@ -103,8 +103,16 @@ private class JsirRendererImpl(val pool: JsirPool) {
                 wrapperFunction.scope.declareFreshName("_")
             }
             else {
-                val moduleName = descriptor.module.name.asString().let { it.substring(1, it.length - 1) }
-                val name = wrapperFunction.scope.declareFreshName(Namer.LOCAL_MODULE_PREFIX + Namer.suggestedModuleName(moduleName))
+                val name = if (descriptor.builtIns.builtInsModule == descriptor) {
+                    wrapperFunction.scope.declareFreshName("kotlin")
+                }
+                else {
+                    val moduleName = descriptor.name.asString().let { it.substring(1, it.length - 1) }
+                    if (moduleName == "kotlin") {
+                        return getInternalName(descriptor.builtIns.builtInsModule)
+                    }
+                    wrapperFunction.scope.declareFreshName(Namer.LOCAL_MODULE_PREFIX + Namer.suggestedModuleName(moduleName))
+                }
                 wrapperFunction.parameters += JsParameter(name)
                 name
             }
@@ -143,11 +151,11 @@ private class JsirRendererImpl(val pool: JsirPool) {
         }
     }
 
-    inner class FunctionRenderer(val function: JsirFunction) {
-        private val jsFunction = JsFunction(wrapperFunction.scope, JsBlock(), function.declaration.toString())
-        private val labelNames = mutableMapOf<JsirLabeled, JsName>()
-        private val variableNames = mutableMapOf<JsirVariable, JsName>()
-        private var scope: JsScope = jsFunction.scope
+    inner class FunctionRenderer(val function: JsirFunction) : JsirRenderingContext {
+        val jsFunction = JsFunction(wrapperFunction.scope, JsBlock(), function.declaration.toString())
+        val labelNames = mutableMapOf<JsirLabeled, JsName>()
+        val variableNames = mutableMapOf<JsirVariable, JsName>()
+        override var scope: JsScope = jsFunction.scope
 
         fun render(): JsFunction {
             jsFunction.name = getInternalName(function.declaration)
@@ -166,12 +174,20 @@ private class JsirRendererImpl(val pool: JsirPool) {
         fun JsirStatement.render(): List<JsStatement> = when (this) {
             is JsirStatement.Assignment -> {
                 val left = this.left
-                listOf(JsExpressionStatement(if (left == null) {
-                    right.render()
+                val right = this.right
+                if (right is JsirExpression.Invocation && right.isJsCode()) {
+                    val (statements, value) = renderJsCode(right)
+                    val last = if (left != null) JsAstUtils.assignment(left.render(), value) else value
+                    statements + JsExpressionStatement(last)
                 }
                 else {
-                    JsAstUtils.assignment(left.render(), right.render())
-                }))
+                    listOf(JsExpressionStatement(if (left == null) {
+                        right.render()
+                    }
+                    else {
+                        JsAstUtils.assignment(left.render(), right.render())
+                    }))
+                }
             }
             is JsirStatement.Block -> {
                 val jsStatements = body.render()
@@ -189,22 +205,29 @@ private class JsirRendererImpl(val pool: JsirPool) {
                 listOf(JsContinue(JsNameRef(target.getJsName())))
             }
             is JsirStatement.Return -> {
-                listOf(JsReturn(value?.render()))
+                val value = this.value
+                if (value is JsirExpression.Invocation && value.isJsCode()) {
+                    val (statements, jsValue) = renderJsCode(value)
+                    statements + JsReturn(jsValue)
+                }
+                else {
+                    listOf(JsReturn(value?.render()))
+                }
             }
             is JsirStatement.Throw -> {
                 listOf(JsThrow(exception.render()))
             }
             is JsirStatement.While -> {
-                listOf(JsWhile(condition.render(), body.render().asStatement()))
+                listOf(JsWhile(condition.render(), body.render().asStatement()).labeled(this))
             }
             is JsirStatement.DoWhile -> {
-                listOf(JsDoWhile(condition.render(), body.render().asStatement()))
+                listOf(JsDoWhile(condition.render(), body.render().asStatement()).labeled(this))
             }
             is JsirStatement.For -> {
                 val jsCondition = condition.render()
                 val jsInitList = preAssignments.renderAssignments()
                 val jsIncrementList = postAssignments.renderAssignments()
-                listOf(JsFor(jsInitList, jsCondition, jsIncrementList, body.render().asStatement()))
+                listOf(JsFor(jsInitList, jsCondition, jsIncrementList, body.render().asStatement()).labeled(this))
             }
             is JsirStatement.If -> {
                 val jsCondition = condition.render()
@@ -224,7 +247,7 @@ private class JsirRendererImpl(val pool: JsirPool) {
                 jsSwitch.cases += JsDefault().apply {
                     statements += defaultClause.render()
                 }
-                listOf(jsSwitch)
+                listOf(jsSwitch.labeled(this))
             }
             is JsirStatement.Try -> {
                 val jsTry = JsTry().apply { tryBlock = JsBlock() }
@@ -246,6 +269,15 @@ private class JsirRendererImpl(val pool: JsirPool) {
                     jsTry.finallyBlock.statements += finallyClause.render()
                 }
                 listOf(jsTry)
+            }
+        }
+
+        private fun JsStatement.labeled(statement: JsirLabeled): JsStatement {
+            return if (statement in labelNames) {
+                JsLabel(labelNames[statement]!!, this)
+            }
+            else {
+                this
             }
         }
 
@@ -320,21 +352,32 @@ private class JsirRendererImpl(val pool: JsirPool) {
             }
 
             is JsirExpression.Invocation -> {
-                val jsReceiver = receiver?.render()
-                val jsArgs = arguments.map { it.render() }.toTypedArray()
-                if (jsReceiver != null) {
-                    if (virtual) {
-                        JsInvocation(JsNameRef(getSuggestedName(function), jsReceiver), *jsArgs)
-                    }
-                    else {
-                        val className = getInternalName(function.containingDeclaration)
-                        val methodRef = JsNameRef(getSuggestedName(function), JsNameRef("prototype", JsNameRef(className)))
-                        JsInvocation(JsNameRef("call", methodRef), *(arrayOf(jsReceiver) + jsArgs))
-                    }
+                if (isJsCode()) {
+                    val (statements, value) = renderJsCode(this)
+                    assert(statements.isEmpty()) { "js() with block statement can't be used as expression at " +
+                                                   source?.getTextWithLocation() }
+                    value
                 }
                 else {
-                    JsInvocation(JsNameRef(getInternalName(function)), *jsArgs)
+                    val jsReceiver = receiver?.render()
+                    val jsArgs = arguments.map { it.render() }.toTypedArray()
+                    if (jsReceiver != null) {
+                        if (virtual) {
+                            JsInvocation(JsNameRef(getSuggestedName(function), jsReceiver), *jsArgs)
+                        }
+                        else {
+                            val className = getInternalName(function.containingDeclaration)
+                            val methodRef = JsNameRef(getSuggestedName(function), JsNameRef("prototype", JsNameRef(className)))
+                            JsInvocation(JsNameRef("call", methodRef), *(arrayOf(jsReceiver) + jsArgs))
+                        }
+                    }
+                    else {
+                        JsInvocation(JsNameRef(getInternalName(function)), *jsArgs)
+                    }
                 }
+            }
+            is JsirExpression.Application -> {
+                JsInvocation(function.render(), *arguments.render().toTypedArray())
             }
             is JsirExpression.NewInstance -> {
                 val jsConstructor = JsNameRef(getInternalName(constructor.containingDeclaration))

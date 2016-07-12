@@ -104,6 +104,10 @@ fun <S, E> JsirExpression.visit(visitor: JsirVisitor<S, E>): E = visitor.accept(
         receiver?.let { it.visit(visitor) }
         arguments.visit(visitor)
     })
+    is JsirExpression.Application -> ({
+        function.visit(visitor)
+        arguments.visit(visitor)
+    })
     is JsirExpression.NewInstance -> ({
         arguments.visit(visitor)
     })
@@ -244,6 +248,11 @@ fun JsirExpression.replace(mapper: JsirMapper): JsirExpression = when (this) {
     }
     is JsirExpression.Invocation -> {
         receiver = receiver?.replace(mapper)
+        arguments.replace(mapper)
+        mapper.map(this)
+    }
+    is JsirExpression.Application -> {
+        function = function.replace(mapper)
         arguments.replace(mapper)
         mapper.map(this)
     }

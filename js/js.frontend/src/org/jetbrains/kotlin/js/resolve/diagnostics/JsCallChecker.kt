@@ -55,6 +55,10 @@ class JsCallChecker(
 
         @JvmStatic fun <F : CallableDescriptor?> ResolvedCall<F>.isJsCall(): Boolean {
             val descriptor = resultingDescriptor
+            return descriptor != null && isJsCallDescriptor(descriptor)
+        }
+
+        @JvmStatic fun isJsCallDescriptor(descriptor: CallableDescriptor): Boolean {
             return descriptor is SimpleFunctionDescriptor && JS_PATTERN.apply(descriptor)
         }
 

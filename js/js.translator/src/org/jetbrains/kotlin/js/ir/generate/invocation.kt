@@ -108,7 +108,7 @@ internal fun JsirContext.generateReceiver(
     val extensionReceiver = resolvedCall.extensionReceiver
 
     if (resolvedCall is VariableAsFunctionResolvedCall) {
-        return generateReceiver(receiverPsi, resolvedCall.variableCall)
+        return Pair(generateInvocation(receiverPsi, resolvedCall.variableCall), null)
     }
 
     return when {

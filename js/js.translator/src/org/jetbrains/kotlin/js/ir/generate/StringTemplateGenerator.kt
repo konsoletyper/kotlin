@@ -43,20 +43,20 @@ internal class StringTemplateGenerator(val context: JsirContext) : KtVisitorVoid
         }
 
         val type = context.bindingContext.getType(expression)
-        if (type == null || type.isMarkedNullable) {
-            flush()
-            mutableParts += JsirExpression.ToString(translatedExpression)
+        flush()
+        mutableParts += if (type == null || type.isMarkedNullable) {
+            JsirExpression.ToString(translatedExpression)
         }
         else {
-            buffer.append(translatedExpression)
+            translatedExpression
         }
     }
 
     override fun visitLiteralStringTemplateEntry(entry: KtLiteralStringTemplateEntry) {
-        super.visitLiteralStringTemplateEntry(entry)
+        buffer.append(entry.text)
     }
 
     override fun visitEscapeStringTemplateEntry(entry: KtEscapeStringTemplateEntry) {
-        super.visitEscapeStringTemplateEntry(entry)
+        buffer.append(entry.unescapedValue)
     }
 }

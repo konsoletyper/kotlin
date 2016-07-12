@@ -206,6 +206,12 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
             arguments.forEach { it.prettyPrint(writer) }
         }
     }
+    is JsirExpression.Application -> {
+        writer.block("apply") {
+            function.prettyPrint(writer)
+            arguments.forEach { it.prettyPrint(writer) }
+        }
+    }
     is JsirExpression.FieldAccess -> {
         val operation = if (receiver != null) "get" else "get-static"
         val fieldString = field.prettyPrint()
