@@ -14,8 +14,18 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir
+package org.jetbrains.kotlin.js.ir.transform
 
-interface JsirLabeled {
-    val suggestedLabelName: String?
+import org.jetbrains.kotlin.js.ir.JsirPool
+import org.jetbrains.kotlin.js.ir.transform.intrinsics.IntrinsicsTransformation
+import org.jetbrains.kotlin.js.ir.transform.optimize.OptimizingTransformation
+
+class Transformer {
+    val transformations = listOf(IntrinsicsTransformation(), OptimizingTransformation())
+
+    fun transform(pool: JsirPool) {
+        for (function in pool.functions.values) {
+            transformations.forEach { it.apply(function) }
+        }
+    }
 }

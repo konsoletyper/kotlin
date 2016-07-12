@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.translate
+package org.jetbrains.kotlin.js.ir.generate
 
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.descriptors.*
@@ -66,6 +66,13 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         }
 
         resultingStatements.add(statement.apply { source = currentSource })
+        return this
+    }
+
+    fun appendAll(statements: List<JsirStatement>): JsirContext {
+        for (statement in statements) {
+            append(statement)
+        }
         return this
     }
 

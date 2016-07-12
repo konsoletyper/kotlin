@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.intrinsics
+package org.jetbrains.kotlin.js.ir.transform.intrinsics
 
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.ir.JsirBinaryOperation
 import org.jetbrains.kotlin.js.ir.JsirExpression
 import org.jetbrains.kotlin.js.ir.JsirStatement
+import org.jetbrains.kotlin.js.ir.JsirType
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 
 class ArraysIntrinsic : Intrinsic {
@@ -51,14 +52,14 @@ class ArraysIntrinsic : Intrinsic {
     }
 
     override fun apply(invocation: JsirExpression.Invocation) = when (invocation.function.name.asString()) {
-        "get" -> JsirExpression.Binary(JsirBinaryOperation.ARRAY_GET, invocation.receiver!!, invocation.arguments[0])
+        "get" -> JsirExpression.Binary(JsirBinaryOperation.ARRAY_GET, JsirType.ANY, invocation.receiver!!, invocation.arguments[0])
         "size" -> JsirExpression.ArrayLength(invocation.receiver!!)
         else -> invocation
     }
 
     override fun applyAsStatement(invocation: JsirExpression.Invocation) = when (invocation.function.name.asString()) {
         "set" -> {
-            val lhs = JsirExpression.Binary(JsirBinaryOperation.ARRAY_GET, invocation.receiver!!, invocation.arguments[0])
+            val lhs = JsirExpression.Binary(JsirBinaryOperation.ARRAY_GET, JsirType.ANY, invocation.receiver!!, invocation.arguments[0])
             JsirStatement.Assignment(lhs, invocation.arguments[1])
         }
         else -> null

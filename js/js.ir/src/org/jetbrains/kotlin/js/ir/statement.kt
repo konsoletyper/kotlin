@@ -30,14 +30,14 @@ sealed class JsirStatement {
         val elseBody = mutableListOf<JsirStatement>()
     }
 
-    class While(var condition: JsirExpression) : JsirStatement(), JsirLabeled {
-        val body = mutableListOf<JsirStatement>()
+    class While(override var condition: JsirExpression) : JsirStatement(), JsirConditionalLoop {
+        override val body = mutableListOf<JsirStatement>()
 
         override var suggestedLabelName: String? = null
     }
 
-    class DoWhile(var condition: JsirExpression) : JsirStatement(), JsirLabeled {
-        val body = mutableListOf<JsirStatement>()
+    class DoWhile(override var condition: JsirExpression) : JsirStatement(), JsirConditionalLoop {
+        override val body = mutableListOf<JsirStatement>()
 
         override var suggestedLabelName: String? = null
     }
@@ -84,4 +84,13 @@ sealed class JsirStatement {
     class Case(var value: JsirExpression) {
         val body = mutableListOf<JsirStatement>()
     }
+}
+
+interface JsirLabeled {
+    val suggestedLabelName: String?
+}
+
+interface JsirConditionalLoop : JsirLabeled {
+    var condition: JsirExpression
+    val body: MutableList<JsirStatement>
 }

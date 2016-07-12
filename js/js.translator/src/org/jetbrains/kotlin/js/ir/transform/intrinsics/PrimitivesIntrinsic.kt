@@ -14,34 +14,23 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.intrinsics
+package org.jetbrains.kotlin.js.ir.transform.intrinsics
 
+import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.ir.JsirBinaryOperation
 import org.jetbrains.kotlin.js.ir.JsirExpression
-import org.jetbrains.kotlin.js.ir.translate.negate
+import org.jetbrains.kotlin.js.ir.JsirType
+import org.jetbrains.kotlin.js.ir.getPrimitiveType
+import org.jetbrains.kotlin.js.ir.generate.negate
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 
 class PrimitivesIntrinsic : Intrinsic {
     override fun isApplicable(descriptor: FunctionDescriptor, asStatement: Boolean): Boolean {
         if (asStatement) return false
 
-        val cls = descriptor.extensionReceiverParameter?.containingDeclaration ?: descriptor.containingDeclaration
-        val className = cls.fqNameSafe.asString()
-        return isApplicableToClass(className) && isApplicableToFunction(descriptor.name.asString())
-    }
-
-    private fun isApplicableToClass(className: String) = when (className) {
-        "kotlin.Boolean",
-        "kotlin.Byte",
-        "kotlin.Short",
-        "kotlin.Int",
-        "kotlin.Long",
-        "kotlin.Float",
-        "kotlin.Double",
-        "kotlin.Character",
-        "kotlin.String" -> true
-        else -> false
+        val className = getClass(descriptor).fqNameSafe.asString()
+        return getType(className) != null && isApplicableToFunction(descriptor.name.asString())
     }
 
     private fun isApplicableToFunction(functionName: String) = when(functionName) {
@@ -59,20 +48,22 @@ class PrimitivesIntrinsic : Intrinsic {
         "inc",
         "dec",
         "equals",
-        "not" -> true
+        "not",
+        "compareTo" -> true
         else -> false
     }
 
-
     override fun apply(invocation: JsirExpression.Invocation): JsirExpression {
         val functionName = invocation.function.name.asString()
+        val type = getType(getClass(invocation.function).fqNameSafe.asString()) ?: return invocation
+
         return when (functionName) {
-            "inc" -> JsirExpression.Binary(JsirBinaryOperation.ADD, invocation.receiver!!, JsirExpression.Constant(1))
-            "dec" -> JsirExpression.Binary(JsirBinaryOperation.SUB, invocation.receiver!!, JsirExpression.Constant(1))
+            "inc" -> JsirExpression.Binary(JsirBinaryOperation.ADD, type, invocation.receiver!!, JsirExpression.Constant(1))
+            "dec" -> JsirExpression.Binary(JsirBinaryOperation.SUB, type, invocation.receiver!!, JsirExpression.Constant(1))
             "not" -> invocation.receiver!!.negate()
             else -> {
                 operation(functionName)?.let {
-                    JsirExpression.Binary(it, invocation.receiver!!, invocation.arguments[0])
+                    JsirExpression.Binary(it, type, invocation.receiver!!, invocation.arguments[0])
                 } ?: invocation
             }
         }
@@ -91,8 +82,21 @@ class PrimitivesIntrinsic : Intrinsic {
         "div" -> JsirBinaryOperation.DIV
         "mod" -> JsirBinaryOperation.REM
         "equals" -> JsirBinaryOperation.REF_EQ
+        "compareTo" -> JsirBinaryOperation.COMPARE
         else -> null
     }
 
     override fun applyAsStatement(invocation: JsirExpression.Invocation) = null
+
+    private fun getType(className: String) = when (className) {
+        "kotlin.String" -> JsirType.ANY
+        else -> {
+            val result = getPrimitiveType(className)
+            if (result != JsirType.ANY) result else null
+        }
+    }
+
+    private fun getClass(function: FunctionDescriptor): DeclarationDescriptor {
+        return function.extensionReceiverParameter?.containingDeclaration ?: function.containingDeclaration
+    }
 }

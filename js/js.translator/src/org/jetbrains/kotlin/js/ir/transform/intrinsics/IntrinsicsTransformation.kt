@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.intrinsics
+package org.jetbrains.kotlin.js.ir.transform.intrinsics
 
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.ir.*
+import org.jetbrains.kotlin.js.ir.transform.Transformation
 
-class IntrinsicsTransformation {
+class IntrinsicsTransformation : Transformation {
     private val intrinsics = listOf(PrimitivesIntrinsic(), ArraysIntrinsic())
     private val intrinsicCache = mutableMapOf<Pair<FunctionDescriptor, Boolean>, Intrinsic?>()
 
-    fun apply(function: JsirFunction) {
+    override fun apply(function: JsirFunction) {
         function.body.replace(object : JsirMapper {
             override fun map(statement: JsirStatement, canChangeType: Boolean) = when (statement) {
                 is JsirStatement.Assignment -> {

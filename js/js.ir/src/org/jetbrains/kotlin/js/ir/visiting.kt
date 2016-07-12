@@ -273,6 +273,13 @@ fun MutableList<JsirStatement>.replace(mapper: JsirMapper): MutableList<JsirStat
     return this
 }
 
+@JvmName("replaceStatements")
+fun MutableList<JsirStatement>.replace(mapper: (JsirExpression) -> JsirExpression) = replace(object: JsirMapper {
+    override fun map(statement: JsirStatement, canChangeType: Boolean) = statement
+
+    override fun map(expression: JsirExpression) = mapper(expression)
+})
+
 @JvmName("replaceExpressions")
 fun MutableList<JsirExpression>.replace(mapper: JsirMapper): MutableList<JsirExpression> {
     val iterator = listIterator()

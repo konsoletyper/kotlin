@@ -283,6 +283,7 @@ private fun JsirBinaryOperation.getSymbol() = when (this) {
     JsirBinaryOperation.REF_EQ -> "==="
     JsirBinaryOperation.REF_NE -> "!=="
     JsirBinaryOperation.ARRAY_GET -> "[]"
+    JsirBinaryOperation.COMPARE -> "compare"
 }
 
 private class SourceWriter {

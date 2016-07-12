@@ -14,27 +14,34 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.translate
+package org.jetbrains.kotlin.js.ir.generate
 
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.js.ir.JsirBinaryOperation
 import org.jetbrains.kotlin.js.ir.JsirExpression
+import org.jetbrains.kotlin.js.ir.getPrimitiveType
+import org.jetbrains.kotlin.js.ir.receiverClass
 import org.jetbrains.kotlin.js.translate.utils.BindingUtils
+import org.jetbrains.kotlin.js.translate.utils.JsDescriptorUtils
 import org.jetbrains.kotlin.js.translate.utils.PsiUtils
 import org.jetbrains.kotlin.lexer.KtToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
+import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.types.expressions.OperatorConventions
 
 internal fun JsirContext.generateBinary(expression: KtBinaryExpression): JsirExpression {
     val operation = PsiUtils.getOperationToken(expression)
+    val operationDescriptor = BindingUtils.getCallableDescriptorForOperationExpression(bindingContext, expression)
     return when {
         operation == KtTokens.ELVIS -> translateElvis(expression.left!!, expression.right!!)
         isAssignmentOperator(operation) -> {
             translateAssignment(expression)
             JsirExpression.Null
         }
+        operationDescriptor != null && JsDescriptorUtils.isCompareTo(operationDescriptor) -> generateCompareTo(expression)
         else -> generateInvocation(expression.left!!, expression.getResolvedCall(bindingContext)!!)
     }
 }
@@ -77,3 +84,25 @@ private fun isAssignmentOperator(operationToken: KtToken) =
         OperatorConventions.ASSIGNMENT_OPERATIONS.keys.contains(operationToken) ||
         PsiUtils.isAssignment(operationToken)
 
+private fun JsirContext.generateCompareTo(expression: KtBinaryExpression): JsirExpression {
+    val psiOperation = PsiUtils.getOperationToken(expression)
+    val call = expression.getResolvedCall(bindingContext)!!
+    val function = call.resultingDescriptor as FunctionDescriptor
+
+    val operation = when (psiOperation) {
+        KtTokens.EQEQ,
+        KtTokens.EQEQEQ -> JsirBinaryOperation.EQ
+        KtTokens.EXCLEQ,
+        KtTokens.EXCLEQEQEQ -> JsirBinaryOperation.NE
+        KtTokens.LT -> JsirBinaryOperation.LT
+        KtTokens.LTEQ -> JsirBinaryOperation.LOE
+        KtTokens.GT -> JsirBinaryOperation.GT
+        KtTokens.GTEQ -> JsirBinaryOperation.GOE
+        else -> throw IllegalArgumentException("Unexpected comparison token: ${psiOperation}")
+    }
+
+    val invocation = generateInvocation(expression.left, call)
+    val type = getPrimitiveType(function.receiverClass!!.fqNameSafe.asString())
+
+    return JsirExpression.Binary(operation, type, invocation, JsirExpression.Constant(0))
+}

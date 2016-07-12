@@ -17,10 +17,7 @@
 package org.jetbrains.kotlin.js.ir
 
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.descriptors.CallableDescriptor
-import org.jetbrains.kotlin.descriptors.ConstructorDescriptor
-import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.descriptors.PropertyDescriptor
+import org.jetbrains.kotlin.descriptors.*
 
 sealed class JsirExpression {
     var source: PsiElement? = null
@@ -70,13 +67,69 @@ sealed class JsirExpression {
             var elseExpression: JsirExpression
     ) : JsirExpression()
 
-    class Binary(var operation: JsirBinaryOperation, var left: JsirExpression, var right: JsirExpression) : JsirExpression()
+    class Binary(
+            var operation: JsirBinaryOperation, var type: JsirType,
+            var left: JsirExpression, var right: JsirExpression
+    ) : JsirExpression()
 
     class Negation(var operand: JsirExpression) : JsirExpression()
 
-    class UnaryMinus(var operand: JsirExpression) : JsirExpression()
+    class UnaryMinus(var type: JsirType, var operand: JsirExpression) : JsirExpression()
 
     class ArrayLength(var operand: JsirExpression) : JsirExpression()
 
     class NewNullPointerExpression : JsirExpression()
 }
+
+enum class JsirBinaryOperation {
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+    REM,
+    BIT_AND,
+    BIT_OR,
+    BIT_XOR,
+    SHL,
+    LSHR,
+    ASHR,
+    AND,
+    OR,
+    EQ,
+    NE,
+    REF_EQ,
+    REF_NE,
+    LT,
+    LOE,
+    GT,
+    GOE,
+    COMPARE,
+    ARRAY_GET
+}
+
+enum class JsirType {
+    BOOLEAN,
+    BYTE,
+    SHORT,
+    CHAR,
+    INT,
+    LONG,
+    FLOAT,
+    DOUBLE,
+    ANY
+}
+
+class JsirFunction(val declaration: CallableDescriptor) {
+    val parameters = mutableListOf<JsirVariable>()
+    val body = mutableListOf<JsirStatement>()
+}
+
+sealed class JsirField {
+    class Backing(val property: PropertyDescriptor) : JsirField()
+
+    class OuterClass(val classDescriptor: ClassDescriptor) : JsirField()
+}
+
+class JsirVariable(val suggestedName: String? = null)
+
+fun JsirVariable.makeReference() = JsirExpression.VariableReference(this)

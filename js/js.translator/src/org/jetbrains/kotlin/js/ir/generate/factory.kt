@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.translate
+package org.jetbrains.kotlin.js.ir.generate
 
 import org.jetbrains.kotlin.js.ir.*
 import org.jetbrains.kotlin.psi.KtExpression
@@ -22,7 +22,10 @@ import org.jetbrains.kotlin.psi.KtExpression
 fun JsirContext.memoize(expression: JsirExpression) = when (expression) {
     is JsirExpression.Null,
     is JsirExpression.This,
+    is JsirExpression.True,
+    is JsirExpression.False,
     is JsirExpression.VariableReference,
+    is JsirExpression.Undefined,
     is JsirExpression.Constant -> expression
 
     else -> {
@@ -40,9 +43,10 @@ fun JsirExpression.nullCheck() = when (this) {
     is JsirExpression.This,
     is JsirExpression.True,
     is JsirExpression.False,
+    is JsirExpression.Undefined,
     is JsirExpression.Constant -> JsirExpression.False
 
-    else -> JsirExpression.Binary(JsirBinaryOperation.REF_EQ, this, JsirExpression.Null)
+    else -> JsirExpression.Binary(JsirBinaryOperation.REF_EQ, JsirType.ANY, this, JsirExpression.Null)
 }
 
 fun JsirContext.assign(left: JsirExpression, right: JsirExpression) {
@@ -52,9 +56,11 @@ fun JsirContext.assign(left: JsirExpression, right: JsirExpression) {
 fun JsirContext.append(expression: JsirExpression) {
     when (expression) {
         is JsirExpression.Null,
+        is JsirExpression.Undefined,
         is JsirExpression.True,
         is JsirExpression.False,
         is JsirExpression.Constant,
+        is JsirExpression.This,
         is JsirExpression.VariableReference -> {}
         else -> append(JsirStatement.Assignment(null, expression))
     }
@@ -67,7 +73,7 @@ fun JsirExpression.negate(): JsirExpression = when (this) {
     is JsirExpression.Binary -> {
         val negatedOperation = operation.negate()
         if (negatedOperation != null) {
-            JsirExpression.Binary(negatedOperation, left, right)
+            JsirExpression.Binary(negatedOperation, type, left, right)
         }
         else {
             JsirExpression.Negation(this)

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.translate
+package org.jetbrains.kotlin.js.ir.generate
 
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.ir.*
@@ -265,10 +265,16 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             val finallyPsi = expression.finallyBlock
             if (finallyPsi != null) {
                 context.nestedBlock(statement.finallyClause) {
-                    context.assign(temporary.makeReference(), context.generate(finallyPsi.finalExpression))
+                    context.generate(finallyPsi.finalExpression)
                 }
             }
-            context.append(statement)
+
+            if (statement.catchClauses.isNotEmpty() || statement.finallyClause.isNotEmpty()) {
+                context.append(statement)
+            }
+            else {
+                context.appendAll(statement.body)
+            }
         }
 
         return temporary.makeReference()

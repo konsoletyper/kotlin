@@ -25,11 +25,10 @@ import org.jetbrains.kotlin.js.analyzer.JsAnalysisResult;
 import org.jetbrains.kotlin.js.config.JsConfig;
 import org.jetbrains.kotlin.js.facade.exceptions.TranslationException;
 import org.jetbrains.kotlin.js.inline.JsInliner;
-import org.jetbrains.kotlin.js.ir.JsirFunction;
 import org.jetbrains.kotlin.js.ir.JsirPool;
-import org.jetbrains.kotlin.js.ir.intrinsics.IntrinsicsTransformation;
+import org.jetbrains.kotlin.js.ir.transform.Transformer;
 import org.jetbrains.kotlin.js.ir.render.JsirRenderer;
-import org.jetbrains.kotlin.js.ir.translate.JsirGenerator;
+import org.jetbrains.kotlin.js.ir.generate.JsirGenerator;
 import org.jetbrains.kotlin.js.translate.context.TranslationContext;
 import org.jetbrains.kotlin.js.translate.general.Translation;
 import org.jetbrains.kotlin.progress.ProgressIndicatorAndCompilationCanceledStatus;
@@ -87,11 +86,8 @@ public final class K2JSTranslator {
             file.accept(irGenerator, irGenerator.getContext());
         }
         JsirPool pool = irGenerator.getContext().getPool();
-
-        IntrinsicsTransformation intrinsicsTransformation = new IntrinsicsTransformation();
-        for (JsirFunction function : pool.getFunctions().values()) {
-            intrinsicsTransformation.apply(function);
-        }
+        Transformer transformer = new Transformer();
+        transformer.transform(pool);
 
         JsProgram altProgram = JsirRenderer.INSTANCE.render(irGenerator.getContext().getPool());
         System.out.println(altProgram.getGlobalBlock().toString());

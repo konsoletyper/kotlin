@@ -53,7 +53,8 @@ private class JsirRendererImpl(val pool: JsirPool) {
     val program = JsProgram("")
     val wrapperFunction = JsFunction(program.rootScope, JsBlock(), "wrapper")
     val importsSection = JsBlock()
-    private val internalNameCache = mutableMapOf<DeclarationDescriptor, JsName>()
+    val internalNameCache = mutableMapOf<DeclarationDescriptor, JsName>()
+    val module = pool.module
 
     fun render() {
         for (function in pool.functions.values) {
@@ -291,6 +292,10 @@ private class JsirRendererImpl(val pool: JsirPool) {
             is JsirExpression.Binary -> {
                 val result: JsExpression = when (operation) {
                     JsirBinaryOperation.ARRAY_GET -> JsArrayAccess(left.render(), right.render())
+                    JsirBinaryOperation.COMPARE -> {
+                        val kotlinName = getInternalName(module.builtIns.builtInsModule)
+                        JsInvocation(JsNameRef("compare", JsNameRef(kotlinName)), left.render(), right.render())
+                    }
                     else -> JsBinaryOperation(operation.asJs(), left.render(), right.render())
                 }
                 result
@@ -390,6 +395,8 @@ private class JsirRendererImpl(val pool: JsirPool) {
             JsirBinaryOperation.GOE -> JsBinaryOperator.GTE
             JsirBinaryOperation.REF_EQ -> JsBinaryOperator.REF_EQ
             JsirBinaryOperation.REF_NE -> JsBinaryOperator.REF_NEQ
+
+            JsirBinaryOperation.COMPARE,
             JsirBinaryOperation.ARRAY_GET -> error("Can't express $this as binary operation in AST")
         }
 

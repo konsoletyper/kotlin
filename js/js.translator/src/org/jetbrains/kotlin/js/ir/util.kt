@@ -17,10 +17,19 @@
 package org.jetbrains.kotlin.js.ir
 
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.PropertyDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 
-sealed class JsirField {
-    class Backing(val property: PropertyDescriptor) : JsirField()
+val FunctionDescriptor.receiverClass: ClassDescriptor?
+    get() = (extensionReceiverParameter?.containingDeclaration ?: containingDeclaration) as? ClassDescriptor
 
-    class OuterClass(val classDescriptor: ClassDescriptor) : JsirField()
+fun getPrimitiveType(name: String) = when (name) {
+    "kotlin.Boolean" -> JsirType.BOOLEAN
+    "kotlin.Byte" -> JsirType.BYTE
+    "kotlin.Short" -> JsirType.SHORT
+    "kotlin.Int" -> JsirType.INT
+    "kotlin.Long" -> JsirType.LONG
+    "kotlin.Float" -> JsirType.FLOAT
+    "kotlin.Double" -> JsirType.DOUBLE
+    "kotlin.Char" -> JsirType.CHAR
+    else -> JsirType.ANY
 }

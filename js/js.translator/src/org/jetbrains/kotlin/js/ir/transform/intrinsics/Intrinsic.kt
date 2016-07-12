@@ -14,29 +14,16 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir
+package org.jetbrains.kotlin.js.ir.transform.intrinsics
 
-enum class JsirBinaryOperation {
-    ADD,
-    SUB,
-    MUL,
-    DIV,
-    REM,
-    BIT_AND,
-    BIT_OR,
-    BIT_XOR,
-    SHL,
-    LSHR,
-    ASHR,
-    AND,
-    OR,
-    EQ,
-    NE,
-    REF_EQ,
-    REF_NE,
-    LT,
-    LOE,
-    GT,
-    GOE,
-    ARRAY_GET
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.js.ir.JsirExpression
+import org.jetbrains.kotlin.js.ir.JsirStatement
+
+interface Intrinsic {
+    fun isApplicable(descriptor: FunctionDescriptor, asStatement: Boolean): Boolean
+
+    fun apply(invocation: JsirExpression.Invocation): JsirExpression
+
+    fun applyAsStatement(invocation: JsirExpression.Invocation): JsirStatement?
 }

@@ -14,16 +14,10 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.intrinsics
+package org.jetbrains.kotlin.js.ir.transform.optimize
 
-import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.js.ir.JsirExpression
-import org.jetbrains.kotlin.js.ir.JsirStatement
+import org.jetbrains.kotlin.js.ir.JsirFunction
 
-interface Intrinsic {
-    fun isApplicable(descriptor: FunctionDescriptor, asStatement: Boolean): Boolean
-
-    fun apply(invocation: JsirExpression.Invocation): JsirExpression
-
-    fun applyAsStatement(invocation: JsirExpression.Invocation): JsirStatement?
+interface Optimization {
+    fun apply(function: JsirFunction): List<Optimization>
 }

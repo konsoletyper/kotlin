@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir
+package org.jetbrains.kotlin.js.ir.transform
 
-import org.jetbrains.kotlin.descriptors.CallableDescriptor
+import org.jetbrains.kotlin.js.ir.JsirFunction
 
-class JsirFunction(val declaration: CallableDescriptor) {
-    val parameters = mutableListOf<JsirVariable>()
-    val body = mutableListOf<JsirStatement>()
+interface Transformation {
+    fun apply(function: JsirFunction)
 }
