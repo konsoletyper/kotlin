@@ -289,7 +289,11 @@ private class JsirRendererImpl(val pool: JsirPool) {
             is JsirExpression.VariableReference -> JsNameRef(variable.getJsName())
 
             is JsirExpression.Binary -> {
-                JsBinaryOperation(operation.asJs(), left.render(), right.render())
+                val result: JsExpression = when (operation) {
+                    JsirBinaryOperation.ARRAY_GET -> JsArrayAccess(left.render(), right.render())
+                    else -> JsBinaryOperation(operation.asJs(), left.render(), right.render())
+                }
+                result
             }
             is JsirExpression.Concat -> {
                 val jsParts = parts.map { it.render() }
@@ -356,6 +360,9 @@ private class JsirRendererImpl(val pool: JsirPool) {
             is JsirExpression.ArrayOf -> {
                 JsArrayLiteral(elements.render())
             }
+            is JsirExpression.ArrayLength -> {
+                JsNameRef("length", operand.render())
+            }
             is JsirExpression.ToString -> {
                 JsInvocation(JsNameRef("toString", value.render()))
             }
@@ -383,6 +390,7 @@ private class JsirRendererImpl(val pool: JsirPool) {
             JsirBinaryOperation.GOE -> JsBinaryOperator.GTE
             JsirBinaryOperation.REF_EQ -> JsBinaryOperator.REF_EQ
             JsirBinaryOperation.REF_NE -> JsBinaryOperator.REF_NEQ
+            JsirBinaryOperation.ARRAY_GET -> error("Can't express $this as binary operation in AST")
         }
 
         @JvmName("renderStatements")

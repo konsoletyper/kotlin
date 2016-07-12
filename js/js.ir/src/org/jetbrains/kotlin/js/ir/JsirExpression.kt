@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.js.ir
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.ConstructorDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 
 sealed class JsirExpression {
@@ -40,7 +41,7 @@ sealed class JsirExpression {
 
     class Invocation(
             var receiver: JsirExpression?,
-            var function: CallableDescriptor,
+            var function: FunctionDescriptor,
             var virtual: Boolean,
             vararg arguments: JsirExpression
     ) : JsirExpression() {
@@ -74,6 +75,8 @@ sealed class JsirExpression {
     class Negation(var operand: JsirExpression) : JsirExpression()
 
     class UnaryMinus(var operand: JsirExpression) : JsirExpression()
+
+    class ArrayLength(var operand: JsirExpression) : JsirExpression()
 
     class NewNullPointerExpression : JsirExpression()
 }

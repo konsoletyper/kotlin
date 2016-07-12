@@ -40,7 +40,14 @@ internal fun JsirContext.generateInvocation(receiverPsi: KtExpression?, resolved
     val (receiverExpr, extensionExpr) = generateReceiver(receiverPsi, resolvedCall)
     val args = extensionExpr?.let { listOf(it) }.orEmpty() + generateArguments(resolvedCall)
 
-    return JsirExpression.Invocation(receiverExpr, resolvedCall.resultingDescriptor, true, *args.toTypedArray())
+    val functionDescriptor = when (descriptor) {
+        is VariableDescriptorWithAccessors -> {
+            descriptor.getter!!
+        }
+        else -> descriptor as FunctionDescriptor
+    }
+
+    return JsirExpression.Invocation(receiverExpr, functionDescriptor, true, *args.toTypedArray())
 }
 
 private fun JsirContext.generateArguments(resolvedCall: ResolvedCall<*>): List<JsirExpression> {

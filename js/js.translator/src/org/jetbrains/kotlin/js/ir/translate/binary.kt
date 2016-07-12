@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.js.ir.translate
 
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.ir.JsirExpression
 import org.jetbrains.kotlin.js.translate.utils.BindingUtils
 import org.jetbrains.kotlin.js.translate.utils.PsiUtils
@@ -50,11 +51,11 @@ private fun JsirContext.translateAssignment(psi: KtBinaryExpression) {
 
     if (BindingUtils.isVariableReassignment(bindingContext, psi)) {
         val variable = generateVariable(leftPsi)
-        variable.set(JsirExpression.Invocation(variable.get(), call.resultingDescriptor, true, generate(rightPsi)))
+        variable.set(JsirExpression.Invocation(variable.get(), call.resultingDescriptor as FunctionDescriptor, true, generate(rightPsi)))
     }
     else {
         val left = memoize(leftPsi)
-        JsirExpression.Invocation(left, call.resultingDescriptor, true, generate(rightPsi))
+        JsirExpression.Invocation(left, call.resultingDescriptor as FunctionDescriptor, true, generate(rightPsi))
     }
 }
 

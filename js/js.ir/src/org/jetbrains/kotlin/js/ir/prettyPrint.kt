@@ -218,6 +218,11 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
             elements.forEach { it.prettyPrint(writer) }
         }
     }
+    is JsirExpression.ArrayLength -> {
+        writer.block("length") {
+            operand.prettyPrint(writer)
+        }
+    }
     is JsirExpression.Concat -> {
         writer.block("concat") {
             parts.forEach { it.prettyPrint(writer) }
@@ -277,6 +282,7 @@ private fun JsirBinaryOperation.getSymbol() = when (this) {
     JsirBinaryOperation.LOE -> "<="
     JsirBinaryOperation.REF_EQ -> "==="
     JsirBinaryOperation.REF_NE -> "!=="
+    JsirBinaryOperation.ARRAY_GET -> "[]"
 }
 
 private class SourceWriter {

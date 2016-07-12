@@ -25,6 +25,9 @@ import org.jetbrains.kotlin.js.analyzer.JsAnalysisResult;
 import org.jetbrains.kotlin.js.config.JsConfig;
 import org.jetbrains.kotlin.js.facade.exceptions.TranslationException;
 import org.jetbrains.kotlin.js.inline.JsInliner;
+import org.jetbrains.kotlin.js.ir.JsirFunction;
+import org.jetbrains.kotlin.js.ir.JsirPool;
+import org.jetbrains.kotlin.js.ir.intrinsics.IntrinsicsTransformation;
 import org.jetbrains.kotlin.js.ir.render.JsirRenderer;
 import org.jetbrains.kotlin.js.ir.translate.JsirGenerator;
 import org.jetbrains.kotlin.js.translate.context.TranslationContext;
@@ -82,6 +85,12 @@ public final class K2JSTranslator {
         JsirGenerator irGenerator = new JsirGenerator(bindingTrace, moduleDescriptor);
         for (KtFile file : files) {
             file.accept(irGenerator, irGenerator.getContext());
+        }
+        JsirPool pool = irGenerator.getContext().getPool();
+
+        IntrinsicsTransformation intrinsicsTransformation = new IntrinsicsTransformation();
+        for (JsirFunction function : pool.getFunctions().values()) {
+            intrinsicsTransformation.apply(function);
         }
 
         JsProgram altProgram = JsirRenderer.INSTANCE.render(irGenerator.getContext().getPool());
