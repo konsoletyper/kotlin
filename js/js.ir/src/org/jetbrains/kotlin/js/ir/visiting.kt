@@ -81,6 +81,7 @@ fun <S, E> List<JsirStatement>.visit(visitor: JsirVisitor<S, E>) = forEach { it.
 fun <S, E> JsirExpression.visit(visitor: JsirVisitor<S, E>): E = visitor.accept(this, when (this) {
     is JsirExpression.ArrayOf -> ({ elements.visit(visitor) })
     is JsirExpression.ArrayLength -> ({ operand.visit(visitor) })
+    is JsirExpression.ArrayCopy -> ({ array.visit(visitor) })
     is JsirExpression.Concat -> ({ parts.visit(visitor) })
     is JsirExpression.Binary -> ({
         left.visit(visitor)
@@ -232,6 +233,10 @@ fun JsirExpression.replace(mapper: JsirMapper): JsirExpression = when (this) {
     }
     is JsirExpression.ArrayOf -> {
         elements.replace(mapper)
+        mapper.map(this)
+    }
+    is JsirExpression.ArrayCopy -> {
+        array = array.replace(mapper)
         mapper.map(this)
     }
     is JsirExpression.ArrayLength -> {

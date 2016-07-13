@@ -33,10 +33,14 @@
 package org.jetbrains.kotlin.js.ir.render
 
 import com.google.dart.compiler.backend.js.ast.*
+import com.google.dart.compiler.backend.js.ast.metadata.SideEffectKind
+import com.google.dart.compiler.backend.js.ast.metadata.sideEffects
+import com.google.dart.compiler.backend.js.ast.metadata.synthetic
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.ir.*
 import org.jetbrains.kotlin.js.translate.context.Namer
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
+import org.jetbrains.kotlin.js.translate.utils.JsAstUtils.pureFqn
 import org.jetbrains.kotlin.js.translate.utils.ManglingUtils
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
@@ -53,8 +57,13 @@ object JsirRenderer {
 
         val invocation = JsInvocation(result.function, arguments)
         val selfName = pool.module.importName
-        val assignment = JsAstUtils.assignment(makePlainModuleRef(selfName, program), invocation)
-        program.globalBlock.statements += assignment.makeStmt()
+        val assignment = if (Namer.requiresEscaping(selfName)) {
+            JsAstUtils.assignment(JsArrayAccess(JsLiteral.THIS, program.getStringLiteral(selfName)), invocation).makeStmt()
+        }
+        else {
+            JsVars(JsVars.JsVar(program.scope.declareName(selfName), invocation))
+        }
+        program.globalBlock.statements += assignment
 
         return program
     }
@@ -79,7 +88,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     val invocationRenderers = listOf(EqualsRenderer(), ToStringRenderer())
     val invocationRendererCache = mutableMapOf<FunctionDescriptor, InvocationRenderer?>()
     val wrapperFunction = JsFunction(program.rootScope, JsBlock(), "wrapper")
-    val importsSection = JsBlock()
+    val importsSection = mutableListOf<JsStatement>()
     val internalNameCache = mutableMapOf<DeclarationDescriptor, JsName>()
     val rootPackage = Package()
     val module = pool.module
@@ -96,7 +105,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             wrapperFunction.body.statements += FunctionRenderer(function).render().makeStmt()
         }
 
-        wrapperFunction.body.statements.addAll(0, importsSection.statements)
+        wrapperFunction.body.statements.addAll(0, importsSection)
 
         exportTopLevel()
         val topLevel = getInternalName(module)
@@ -189,7 +198,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             if (descriptor !is ModuleDescriptor) {
                 val module = DescriptorUtils.getContainingModule(descriptor)
                 if (module != pool.module) {
-                    importsSection.statements += JsVars(JsVars.JsVar(name, getExternalName(descriptor)))
+                    importsSection += JsVars(JsVars.JsVar(name, getExternalName(descriptor)))
                 }
             }
             name
@@ -266,6 +275,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             val declaredVariables = variableNames.keys - function.parameters
             if (declaredVariables.isNotEmpty()) {
                 val declarations = JsVars(*declaredVariables.map { JsVars.JsVar(variableNames[it]!!) }.toTypedArray())
+                        .apply { synthetic = true }
                 jsFunction.body.statements.add(0, declarations)
             }
 
@@ -297,12 +307,21 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                     statements + JsExpressionStatement(last)
                 }
                 else {
-                    listOf(JsExpressionStatement(if (left == null) {
+                    val temporary = left is JsirExpression.VariableReference && left.variable.suggestedName == null
+                    val statement = JsExpressionStatement(if (left == null) {
                         right.render()
                     }
                     else {
-                        JsAstUtils.assignment(left.render(), right.render())
-                    }))
+                        JsAstUtils.assignment(left.render(), right.render()).apply {
+                            if (temporary) {
+                                synthetic = true
+                            }
+                        }
+                    })
+                    if (temporary) {
+                        statement.synthetic = true
+                    }
+                    listOf(statement)
                 }
             }
             is JsirStatement.Block -> {
@@ -390,7 +409,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
 
         private fun JsStatement.labeled(statement: JsirLabeled): JsStatement {
             return if (statement in labelNames) {
-                JsLabel(labelNames[statement]!!, this)
+                JsLabel(labelNames[statement]!!, this).apply { synthetic = true }
             }
             else {
                 this
@@ -439,14 +458,14 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             is JsirExpression.This -> JsLiteral.THIS
             is JsirExpression.Undefined -> JsPrefixOperation(JsUnaryOperator.VOID, program.getNumberLiteral(0))
 
-            is JsirExpression.VariableReference -> JsNameRef(variable.getJsName())
+            is JsirExpression.VariableReference -> pureFqn(variable.getJsName(), null)
 
             is JsirExpression.Binary -> {
                 val result: JsExpression = when (operation) {
                     JsirBinaryOperation.ARRAY_GET -> JsArrayAccess(left.render(), right.render())
                     JsirBinaryOperation.COMPARE -> {
                         val kotlinName = getInternalName(module.builtIns.builtInsModule)
-                        JsInvocation(JsNameRef("compare", JsNameRef(kotlinName)), left.render(), right.render())
+                        JsInvocation(pureFqn("compare", pureFqn(kotlinName, null)), left.render(), right.render())
                     }
                     else -> JsBinaryOperation(operation.asJs(), left.render(), right.render())
                 }
@@ -488,16 +507,16 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                         val jsArgs = arguments.map { it.render() }.toTypedArray()
                         if (jsReceiver != null) {
                             if (virtual) {
-                                JsInvocation(JsNameRef(getSuggestedName(function), jsReceiver), *jsArgs)
+                                JsInvocation(pureFqn(getSuggestedName(function), jsReceiver), *jsArgs)
                             }
                             else {
                                 val className = getInternalName(function.containingDeclaration)
-                                val methodRef = JsNameRef(getSuggestedName(function), JsNameRef("prototype", JsNameRef(className)))
-                                JsInvocation(JsNameRef("call", methodRef), *(arrayOf(jsReceiver) + jsArgs))
+                                val methodRef = pureFqn(getSuggestedName(function), pureFqn("prototype", pureFqn(className, null)))
+                                JsInvocation(pureFqn("call", methodRef), *(arrayOf(jsReceiver) + jsArgs))
                             }
                         }
                         else {
-                            JsInvocation(JsNameRef(getInternalName(function)), *jsArgs)
+                            JsInvocation(pureFqn(getInternalName(function), null), *jsArgs)
                         }
                     }
                 }
@@ -506,7 +525,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                 JsInvocation(function.render(), *arguments.render().toTypedArray())
             }
             is JsirExpression.NewInstance -> {
-                val jsConstructor = JsNameRef(getInternalName(constructor.containingDeclaration))
+                val jsConstructor = pureFqn(getInternalName(constructor.containingDeclaration), null)
                 val jsArgs = arguments.map { it.render() }
                 JsNew(jsConstructor, jsArgs)
             }
@@ -515,15 +534,19 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                 val receiver = this.receiver
                 when (field) {
                     is JsirField.Backing -> {
-                        if (receiver != null) {
+                        (if (receiver != null) {
                             JsNameRef(getSuggestedName(field.property), receiver.render())
                         }
                         else {
                             JsNameRef(getInternalName(field.property))
+                        }).apply {
+                            sideEffects = SideEffectKind.DEPENDS_ON_STATE
                         }
                     }
                     is JsirField.OuterClass -> {
-                        JsNameRef("\$outer", receiver!!.render())
+                        JsNameRef("\$outer", receiver!!.render()).apply {
+                            sideEffects = SideEffectKind.DEPENDS_ON_STATE
+                        }
                     }
                 }
             }
@@ -534,8 +557,13 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             is JsirExpression.ArrayOf -> {
                 JsArrayLiteral(elements.render())
             }
+            is JsirExpression.ArrayCopy -> {
+                JsInvocation(pureFqn("slice", array.render()))
+            }
             is JsirExpression.ArrayLength -> {
-                JsNameRef("length", operand.render())
+                JsNameRef("length", operand.render()).apply {
+                    sideEffects = SideEffectKind.DEPENDS_ON_STATE
+                }
             }
             is JsirExpression.ToString -> {
                 JsInvocation(JsNameRef("toString", value.render()))

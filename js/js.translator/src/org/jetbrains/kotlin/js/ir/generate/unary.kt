@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.js.translate.utils.BindingUtils
 import org.jetbrains.kotlin.js.translate.utils.PsiUtils
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtConstantExpression
+import org.jetbrains.kotlin.psi.KtPostfixExpression
 import org.jetbrains.kotlin.psi.KtUnaryExpression
 import org.jetbrains.kotlin.psi.psiUtil.getTextWithLocation
 import org.jetbrains.kotlin.resolve.BindingContextUtils
@@ -56,15 +57,22 @@ internal fun JsirContext.generateUnary(expression: KtUnaryExpression): JsirExpre
     }
 
     val resolvedCall = expression.getFunctionResolvedCallWithAssert(bindingContext)
-    return generateInvocation(expression.baseExpression!!, resolvedCall)
+    return generateInvocation(resolvedCall, defaultReceiverFactory(expression.baseExpression!!))
 }
 
 private fun JsirContext.generateIncrement(expression: KtUnaryExpression): JsirExpression {
     val resolvedCall = expression.getFunctionResolvedCallWithAssert(bindingContext)
     val variable = generateVariable(expression.baseExpression!!)
+    val receiverFactory = defaultReceiverFactory(expression.baseExpression!!)
 
-    val temporary = JsirVariable()
-    assign(temporary.makeReference(), variable.get())
-    variable.set(generateInvocation(expression.baseExpression!!, resolvedCall))
-    return temporary.makeReference()
+    return if (expression is KtPostfixExpression) {
+        val temporary = JsirVariable().makeReference()
+        assign(temporary, variable.get())
+        variable.set(generateInvocation(resolvedCall, receiverFactory))
+        temporary
+    }
+    else {
+        variable.set(generateInvocation(resolvedCall, receiverFactory))
+        variable.get()
+    }
 }

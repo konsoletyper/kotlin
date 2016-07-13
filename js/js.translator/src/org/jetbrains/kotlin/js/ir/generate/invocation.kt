@@ -22,8 +22,10 @@ import org.jetbrains.kotlin.descriptors.VariableDescriptor
 import org.jetbrains.kotlin.descriptors.VariableDescriptorWithAccessors
 import org.jetbrains.kotlin.js.ir.JsirExpression
 import org.jetbrains.kotlin.js.ir.JsirField
+import org.jetbrains.kotlin.psi.KtArrayAccessExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
+import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall
@@ -31,14 +33,22 @@ import org.jetbrains.kotlin.resolve.scopes.receivers.ExpressionReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
 
-internal fun JsirContext.generateInvocation(receiverPsi: KtExpression?, resolvedCall: ResolvedCall<*>): JsirExpression {
+internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, receiverFactory: (() -> JsirExpression)?): JsirExpression {
+    val translatedArguments = resolvedCall.valueArgumentsByIndex!!.map { argument ->
+        argument.arguments.map { generate(it.getArgumentExpression()!!) }
+    }
+    return generateInvocation(resolvedCall, translatedArguments, receiverFactory)
+}
+
+internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, arguments: List<List<JsirExpression>>,
+                                            receiverFactory: (() -> JsirExpression)?): JsirExpression {
     val descriptor = resolvedCall.resultingDescriptor
     if (descriptor is VariableDescriptor && descriptor.containingDeclaration == function) {
         return getVariable(descriptor).get()
     }
 
-    val (receiverExpr, extensionExpr) = generateReceiver(receiverPsi, resolvedCall)
-    val args = extensionExpr?.let { listOf(it) }.orEmpty() + generateArguments(resolvedCall)
+    val (receiverExpr, extensionExpr) = generateReceiver(resolvedCall, receiverFactory)
+    val args = extensionExpr?.let { listOf(it) }.orEmpty() + generateArguments(resolvedCall, arguments)
 
     val functionDescriptor = when (descriptor) {
         is VariableDescriptorWithAccessors -> {
@@ -50,36 +60,45 @@ internal fun JsirContext.generateInvocation(receiverPsi: KtExpression?, resolved
     return JsirExpression.Invocation(receiverExpr, functionDescriptor, true, *args.toTypedArray())
 }
 
-private fun JsirContext.generateArguments(resolvedCall: ResolvedCall<*>): List<JsirExpression> {
+private fun JsirContext.generateArguments(resolvedCall: ResolvedCall<*>, arguments: List<List<JsirExpression>>): List<JsirExpression> {
     val function = resolvedCall.resultingDescriptor
     if (function?.valueParameters?.isEmpty() ?: false) return emptyList()
 
-    val arguments = resolvedCall.valueArgumentsByIndex!!
     return function.valueParameters.map { parameter ->
         val argument = arguments[parameter.index]
         if (parameter.varargElementType == null) {
-            if (argument.arguments.isNotEmpty()) {
-                memoize(argument.arguments[0].getArgumentExpression()!!)
+            if (argument.isNotEmpty()) {
+                memoize(argument[0])
             }
             else {
                 JsirExpression.Undefined
             }
         }
         else {
-            JsirExpression.ArrayOf(*argument.arguments.map { memoize(it.getArgumentExpression()!!) }.toTypedArray())
+            JsirExpression.ArrayOf(*argument.map { memoize(it) }.toTypedArray())
         }
     }
 }
 
-internal fun JsirContext.generateVariable(receiverPsi: KtExpression?, resolvedCall: ResolvedCall<*>): VariableAccessor {
+internal fun JsirContext.generateVariable(psi: KtExpression): VariableAccessor {
+    val receiverFactory: (() -> JsirExpression)? = when (psi) {
+        is KtQualifiedExpression -> ({ generate(psi.receiverExpression) })
+        is KtArrayAccessExpression -> return generateArrayVariable(psi)
+        else -> null
+    }
+
+    return generateVariable(psi.getResolvedCall(bindingContext)!!, receiverFactory)
+}
+
+internal fun JsirContext.generateVariable(resolvedCall: ResolvedCall<*>, receiverFactory: (() -> JsirExpression)?): VariableAccessor {
     val descriptor = resolvedCall.resultingDescriptor
     if (descriptor is VariableDescriptor && descriptor.containingDeclaration is FunctionDescriptor) {
         return getVariable(descriptor)
     }
 
-    if (descriptor !is VariableDescriptorWithAccessors) error("Non-local variable should have accessors: " + descriptor)
+    if (descriptor !is VariableDescriptorWithAccessors) error("Non-local variable should have accessors: $descriptor")
 
-    val (receiverExpr, extensionExpr) = generateReceiver(receiverPsi, resolvedCall)
+    val (receiverExpr, extensionExpr) = generateReceiver(resolvedCall, receiverFactory)
     val extensionArgs = extensionExpr?.let { listOf(it) }.orEmpty()
 
     return object : VariableAccessor {
@@ -91,37 +110,46 @@ internal fun JsirContext.generateVariable(receiverPsi: KtExpression?, resolvedCa
     }
 }
 
-internal fun JsirContext.generateVariable(psi: KtExpression): VariableAccessor {
-    val receiverPsi = when (psi) {
-        is KtQualifiedExpression -> psi.receiverExpression
-        else -> null
-    }
+internal fun JsirContext.generateArrayVariable(arrayPsi: KtArrayAccessExpression): VariableAccessor {
+    val getResolvedCall = bindingContext[BindingContext.INDEXED_LVALUE_GET, arrayPsi]
+    val setResolvedCall = bindingContext[BindingContext.INDEXED_LVALUE_SET, arrayPsi]
+    val array = memoize(arrayPsi.arrayExpression!!)
+    val indexes = arrayPsi.indexExpressions.map { listOf(memoize(it)) }
+    val arrayReceiverFactory: () -> JsirExpression = { array }
 
-    return generateVariable(receiverPsi, psi.getResolvedCall(bindingContext)!!)
+    return object: VariableAccessor {
+        override fun get(): JsirExpression {
+            return generateInvocation(getResolvedCall!!, indexes, arrayReceiverFactory)
+        }
+
+        override fun set(value: JsirExpression) {
+            append(generateInvocation(setResolvedCall!!, indexes + listOf(listOf(value)), arrayReceiverFactory))
+        }
+    }
 }
 
 internal fun JsirContext.generateReceiver(
-        receiverPsi: KtExpression?,
-        resolvedCall: ResolvedCall<*>
+        resolvedCall: ResolvedCall<*>,
+        receiverFactory: (() -> JsirExpression)?
 ): Pair<JsirExpression?, JsirExpression?> {
     val dispatchReceiver = resolvedCall.dispatchReceiver
     val extensionReceiver = resolvedCall.extensionReceiver
 
     if (resolvedCall is VariableAsFunctionResolvedCall) {
-        return Pair(generateInvocation(receiverPsi, resolvedCall.variableCall), null)
+        return Pair(generateInvocation(resolvedCall.variableCall, receiverFactory), null)
     }
 
     return when {
-        dispatchReceiver != null -> Pair(generateMainReceiver(receiverPsi, dispatchReceiver),
+        dispatchReceiver != null -> Pair(generateMainReceiver(dispatchReceiver, receiverFactory),
                                          extensionReceiver?.let { generateExtensionReceiver(it) })
-        extensionReceiver != null -> Pair(null, generateMainReceiver(receiverPsi, extensionReceiver))
+        extensionReceiver != null -> Pair(null, generateMainReceiver(extensionReceiver, receiverFactory))
         else -> Pair(null, null)
     }
 }
 
-private fun JsirContext.generateMainReceiver(receiverPsi: KtExpression?, receiver: ReceiverValue) = when (receiver) {
-    is ExpressionReceiver -> memoize(receiver.expression)
-    else -> memoize(receiverPsi!!)
+private fun JsirContext.generateMainReceiver(receiver: ReceiverValue, receiverFactory: (() -> JsirExpression)?) = when (receiver) {
+    is ExpressionReceiver -> memoize(receiverFactory?.let { it() } ?: memoize(receiver.expression))
+    else -> memoize(receiverFactory!!())
 }
 
 private fun JsirContext.generateExtensionReceiver(receiver: ReceiverValue) = when (receiver) {
@@ -138,3 +166,5 @@ internal fun JsirContext.generateThis(descriptor: ClassDescriptor): JsirExpressi
     }
     return result
 }
+
+internal fun JsirContext.defaultReceiverFactory(psi: KtExpression?): (() -> JsirExpression)? = psi?.let { ({ generate(it) }) }

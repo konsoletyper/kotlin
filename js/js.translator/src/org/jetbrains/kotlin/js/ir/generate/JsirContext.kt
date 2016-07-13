@@ -56,7 +56,7 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         private set
 
     val continueReplacements: Map<JsirLabeled, JsirLabeled>
-        get() = continueReplacements
+        get() = continueReplacementsImpl
 
     val pool = JsirPool(module)
 
@@ -141,10 +141,13 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         }
     }
 
-    fun nestedLabel(name: String?, statement: JsirLabeled, loop: Boolean, action: () -> Unit) {
+    fun nestedLabel(name: String?, statement: JsirLabeled, defaultBreak: Boolean, loop: Boolean, action: () -> Unit) {
         val oldBreakTarget = defaultBreakTarget
         val oldContinueTarget = defaultContinueTarget
-        defaultBreakTarget = statement
+
+        if (defaultBreak) {
+            defaultBreakTarget = statement
+        }
         if (loop) {
             defaultContinueTarget = statement
         }
@@ -184,7 +187,15 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
 
     fun getLabelTarget(psi: KtSimpleNameExpression) = labeledStatements[psi.getReferencedName()]!!
 
-    fun generate(expression: KtExpression) = generator(expression)
+    fun generate(expression: KtExpression) = try {
+        generator(expression)
+    }
+    catch (e: JsirGenerationException) {
+        throw e
+    }
+    catch (e: Throwable) {
+        throw JsirGenerationException(expression, e)
+    }
 
     inner class LocalVariableAccessor(val localVariable: JsirVariable) : VariableAccessor {
         override fun get() = localVariable.makeReference()

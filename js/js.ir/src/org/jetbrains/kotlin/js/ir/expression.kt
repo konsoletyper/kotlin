@@ -60,6 +60,8 @@ sealed class JsirExpression {
         val elements = mutableListOf(*elements)
     }
 
+    class ArrayCopy(var array: JsirExpression) : JsirExpression()
+
     class Concat(vararg parts: JsirExpression) : JsirExpression() {
         val parts = mutableListOf(*parts)
     }

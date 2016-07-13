@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.js.ir.transform.Transformation
 class IntrinsicsTransformation : Transformation {
     private val intrinsics = listOf(
             PrimitivesIntrinsic(),
+            ArrayOfInstrinsic(),
             ArraysIntrinsic(),
             InvokeIntrinsic()
     )

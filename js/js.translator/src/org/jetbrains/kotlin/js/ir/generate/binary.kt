@@ -26,6 +26,7 @@ import org.jetbrains.kotlin.js.translate.utils.JsDescriptorUtils
 import org.jetbrains.kotlin.js.translate.utils.PsiUtils
 import org.jetbrains.kotlin.lexer.KtToken
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtArrayAccessExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
@@ -35,27 +36,28 @@ import org.jetbrains.kotlin.types.expressions.OperatorConventions
 internal fun JsirContext.generateBinary(expression: KtBinaryExpression): JsirExpression {
     val operation = PsiUtils.getOperationToken(expression)
     val operationDescriptor = BindingUtils.getCallableDescriptorForOperationExpression(bindingContext, expression)
+    val receiverFactory = defaultReceiverFactory(expression.left!!)
     return when {
-        operation == KtTokens.ELVIS -> translateElvis(expression.left!!, expression.right!!)
+        operation == KtTokens.ELVIS -> generateElvis(expression.left!!, expression.right!!)
         isAssignmentOperator(operation) -> {
-            translateAssignment(expression)
+            generateAssignment(expression)
             JsirExpression.Null
         }
         operationDescriptor != null && JsDescriptorUtils.isCompareTo(operationDescriptor) -> generateCompareTo(expression)
-        operation == KtTokens.EXCLEQ -> generateInvocation(expression.left!!, expression.getResolvedCall(bindingContext)!!).negate()
-        else -> generateInvocation(expression.left!!, expression.getResolvedCall(bindingContext)!!)
+        operation == KtTokens.EXCLEQ -> generateInvocation(expression.getResolvedCall(bindingContext)!!, receiverFactory).negate()
+        else -> generateInvocation(expression.getResolvedCall(bindingContext)!!, receiverFactory)
     }
 }
 
-private fun JsirContext.translateElvis(leftPsi: KtExpression, rightPsi: KtExpression): JsirExpression {
+private fun JsirContext.generateElvis(leftPsi: KtExpression, rightPsi: KtExpression): JsirExpression {
     val left = memoize(leftPsi)
     return JsirExpression.Conditional(left.nullCheck(), left, generate(rightPsi))
 }
 
-private fun JsirContext.translateAssignment(psi: KtBinaryExpression) {
-    val call = psi.getResolvedCall(bindingContext) ?: return translateSimpleAssignment(psi)
+private fun JsirContext.generateAssignment(psi: KtBinaryExpression) {
     val leftPsi = psi.left!!
     val rightPsi = psi.right!!
+    val call = psi.getResolvedCall(bindingContext) ?: return generateSimpleAssignment(psi)
 
     if (BindingUtils.isVariableReassignment(bindingContext, psi)) {
         val variable = generateVariable(leftPsi)
@@ -63,12 +65,13 @@ private fun JsirContext.translateAssignment(psi: KtBinaryExpression) {
     }
     else {
         val left = memoize(leftPsi)
-        JsirExpression.Invocation(left, call.resultingDescriptor as FunctionDescriptor, true, generate(rightPsi))
+        append(JsirExpression.Invocation(left, call.resultingDescriptor as FunctionDescriptor, true, generate(rightPsi)))
     }
 }
 
-private fun JsirContext.translateSimpleAssignment(psi: KtBinaryExpression) {
-    val left = generateVariable(psi.left!!)
+private fun JsirContext.generateSimpleAssignment(psi: KtBinaryExpression) {
+    val leftPsi = psi.left!!
+    val left = generateVariable(leftPsi)
     val right = generate(psi.right!!)
     val psiOperation = PsiUtils.getOperationToken(psi)
 
@@ -102,7 +105,7 @@ private fun JsirContext.generateCompareTo(expression: KtBinaryExpression): JsirE
         else -> throw IllegalArgumentException("Unexpected comparison token: ${psiOperation}")
     }
 
-    val invocation = generateInvocation(expression.left, call)
+    val invocation = generateInvocation(call, defaultReceiverFactory(expression.left))
     val type = getPrimitiveType(function.receiverClass!!.fqNameSafe.asString())
 
     return JsirExpression.Binary(operation, type, invocation, JsirExpression.Constant(0))

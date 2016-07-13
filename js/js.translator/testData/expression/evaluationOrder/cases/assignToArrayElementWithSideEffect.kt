@@ -2,10 +2,6 @@ package foo
 
 var global: String = ""
 
-class A {
-    var prop: Int = 0
-}
-
 fun bar(s: String, index: Int): Int {
     global += s
     return index

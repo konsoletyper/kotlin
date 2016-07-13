@@ -224,6 +224,11 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
             elements.forEach { it.prettyPrint(writer) }
         }
     }
+    is JsirExpression.ArrayCopy -> {
+        writer.block("array-copy") {
+            array.prettyPrint(writer)
+        }
+    }
     is JsirExpression.ArrayLength -> {
         writer.block("length") {
             operand.prettyPrint(writer)

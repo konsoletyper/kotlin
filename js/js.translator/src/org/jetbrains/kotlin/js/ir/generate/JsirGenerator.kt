@@ -40,7 +40,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
 
     override fun visitKtElement(expression: KtElement, context: JsirContext): JsirExpression {
         bindingTrace.report(ErrorsJs.NOT_SUPPORTED.on(expression, expression))
-        return JsirExpression.Null
+        return JsirExpression.Undefined
     }
 
     override fun visitConstantExpression(expression: KtConstantExpression, context: JsirContext): JsirExpression {
@@ -72,17 +72,30 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         }
     }
 
-    override fun visitBlockExpression(expression: KtBlockExpression, data: JsirContext): JsirExpression {
-        return context.withSource(expression) {
-            if (expression.statements.isNotEmpty()) {
+    override fun visitBlockExpression(expression: KtBlockExpression, data: JsirContext) = generateBlockExpression(expression, null)
+
+    private fun generateBlockExpression(expression: KtBlockExpression, label: String?): JsirExpression {
+        return if (expression.statements.isNotEmpty()) {
+            if (label != null) {
+                val block = JsirStatement.Block()
+                val temporary = JsirVariable().makeReference()
+                context.nestedLabel(label, block, false, false) {
+                    for (statement in expression.statements.dropLast(1)) {
+                        context.append(context.generate(statement))
+                    }
+                    context.assign(temporary, context.generate(expression.statements.last()))
+                }
+                temporary
+            }
+            else {
                 for (statement in expression.statements.dropLast(1)) {
                     context.append(context.generate(statement))
                 }
                 context.generate(expression.statements.last())
             }
-            else {
-                JsirExpression.Null
-            }
+        }
+        else {
+            JsirExpression.Undefined
         }
     }
 
@@ -92,7 +105,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             val target = getNonLocalReturnTarget(expression) ?: context.function
             context.append(JsirStatement.Return(returnValue, target!!))
         }
-        return JsirExpression.Null
+        return JsirExpression.Undefined
     }
 
     override fun visitBreakExpression(expression: KtBreakExpression, data: JsirContext?): JsirExpression {
@@ -100,7 +113,32 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             val target = expression.getTargetLabel()?.let { context.getLabelTarget(it) } ?: context.defaultBreakTarget
             context.append(JsirStatement.Break(target!!))
         }
-        return JsirExpression.Null
+        return JsirExpression.Undefined
+    }
+
+    override fun visitContinueExpression(expression: KtContinueExpression, data: JsirContext?): JsirExpression {
+        context.withSource(expression) {
+            val target = expression.getTargetLabel()?.let { context.getLabelTarget(it) } ?: context.defaultContinueTarget!!
+            val replacement = context.continueReplacements[target]
+            context.append(if (replacement != null) {
+                JsirStatement.Break(replacement)
+            }
+            else {
+                JsirStatement.Continue(target)
+            })
+        }
+        return JsirExpression.Undefined
+    }
+
+    override fun visitLabeledExpression(expression: KtLabeledExpression, data: JsirContext?): JsirExpression {
+        val label = expression.getLabelName()!!
+        val body = expression.baseExpression!!
+        return when (body) {
+            is KtDoWhileExpression -> generateDoWhile(body, label)
+            is KtWhileExpression -> generateWhile(body, label)
+            is KtBlockExpression -> generateBlockExpression(body, label)
+            else -> super.visitLabeledExpression(expression, data)
+        }
     }
 
     private fun getNonLocalReturnTarget(expression: KtReturnExpression): FunctionDescriptor? {
@@ -133,7 +171,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             expressionInside.accept(this, context)
         }
         else {
-            JsirExpression.Null
+            JsirExpression.Undefined
         }
     }
 
@@ -150,39 +188,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     override fun visitNamedFunction(functionPsi: KtNamedFunction, data: JsirContext): JsirExpression {
-        if (!functionPsi.hasBody()) return JsirExpression.Null
-
-        val descriptor = context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, functionPsi] as FunctionDescriptor
-        context.nestedFunction(descriptor) {
-            val function = JsirFunction(descriptor)
-            for (parameter in descriptor.valueParameters) {
-                function.parameters += context.getVariable(parameter).localVariable
-            }
-
-            context.nestedBlock(function.body) {
-                for (parameterPsi in functionPsi.valueParameterList?.parameters.orEmpty()) {
-                    val defaultValuePsi = parameterPsi.defaultValue ?: continue
-                    val parameter = context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, parameterPsi]
-                            as ValueParameterDescriptor
-                    val variable = context.getVariable(parameter)
-
-                    val isUndefined = JsirExpression.Binary(JsirBinaryOperation.REF_EQ, JsirType.ANY, variable.get(),
-                                                            JsirExpression.Undefined)
-                    val conditional = JsirStatement.If(isUndefined)
-                    context.nestedBlock(conditional.thenBody) {
-                        variable.set(context.generate(defaultValuePsi))
-                    }
-                    context.append(conditional)
-                }
-
-                val returnValue = context.generate(functionPsi.bodyExpression!!)
-                context.append(JsirStatement.Return(returnValue, descriptor))
-            }
-
-            context.pool.addFunction(function)
-        }
-
-        return JsirExpression.Null
+        return generateFunctionDeclaration(functionPsi)
     }
 
     override fun visitKtFile(file: KtFile, data: JsirContext): JsirExpression {
@@ -190,7 +196,11 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             context.generate(declaration)
         }
 
-        return JsirExpression.Null
+        return JsirExpression.Undefined
+    }
+
+    override fun visitClass(klass: KtClass, data: JsirContext?): JsirExpression {
+        return JsirExpression.Undefined
     }
 
     override fun visitCallExpression(expression: KtCallExpression, data: JsirContext?): JsirExpression {
@@ -202,7 +212,8 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         else {
             null
         }
-        return context.generateInvocation(qualifier, resolvedCall)
+
+        return context.generateInvocation(resolvedCall, context.defaultReceiverFactory(qualifier))
     }
 
     override fun visitProperty(propertyPsi: KtProperty, data: JsirContext): JsirExpression {
@@ -230,7 +241,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             generateAccessor(propertyPsi.getter, variable.getter)
             generateAccessor(propertyPsi.setter, variable.setter)
         }
-        return JsirExpression.Null
+        return JsirExpression.Undefined
     }
 
     private fun generateAccessor(psi: KtPropertyAccessor?, accessor: VariableAccessorDescriptor?) {
@@ -263,99 +274,165 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
 
     override fun visitIfExpression(expression: KtIfExpression, data: JsirContext): JsirExpression {
         val temporary = JsirVariable()
-        context.withSource(expression) {
-            val conditionPsi = expression.condition!!
-            val statement = context.withSource(conditionPsi) {
-                JsirStatement.If(context.generate(conditionPsi))
-            }
-            context.append(statement)
-            context.nestedBlock(statement.thenBody) {
-                context.assign(temporary.makeReference(), context.generate(expression.then!!))
-            }
-            expression.`else`?.let { elseExpr ->
-                context.nestedBlock(statement.elseBody) {
-                    context.assign(temporary.makeReference(), context.generate(elseExpr))
-                }
+
+        val conditionPsi = expression.condition!!
+        val statement = context.withSource(conditionPsi) {
+            JsirStatement.If(context.generate(conditionPsi))
+        }
+        context.append(statement)
+        context.nestedBlock(statement.thenBody) {
+            context.assign(temporary.makeReference(), context.generate(expression.then!!))
+        }
+        expression.`else`?.let { elseExpr ->
+            context.nestedBlock(statement.elseBody) {
+                context.assign(temporary.makeReference(), context.generate(elseExpr))
             }
         }
+
         return temporary.makeReference()
     }
 
-    override fun visitDoWhileExpression(expression: KtDoWhileExpression, data: JsirContext): JsirExpression {
-        context.withSource(expression) {
-            val statement = JsirStatement.DoWhile(JsirExpression.True)
-            context.nestedLabel(null, statement, true) {
-                context.nestedBlock(statement.body) {
-                    val block = JsirStatement.Block()
-                    context.append(block)
-                    context.nestedBlock(block.body) {
-                        context.withContinueReplacement(statement, block) {
-                            expression.body?.let { context.generate(it) }
-                        }
+    override fun visitWhileExpression(expression: KtWhileExpression, data: JsirContext?) = generateWhile(expression, null)
+
+    private fun generateWhile(expression: KtWhileExpression, label: String?): JsirExpression {
+        val statement = JsirStatement.While(JsirExpression.True)
+        context.nestedLabel(label, statement, true, true) {
+            context.nestedBlock(statement.body) {
+                context.withSource(expression.condition) {
+                    val conditionalBreak = JsirStatement.If(context.generate(expression.condition!!).negate())
+                    context.append(conditionalBreak)
+                    context.nestedBlock(conditionalBreak.thenBody) {
+                        context.append(JsirStatement.Break(statement))
                     }
-                    context.withSource(expression.condition) {
-                        val conditionalBreak = JsirStatement.If(context.generate(expression.condition!!).negate())
-                        context.append(conditionalBreak)
-                        context.nestedBlock(conditionalBreak.thenBody) {
-                            context.append(JsirStatement.Break(statement))
-                        }
+                }
+
+                expression.body?.let { context.generate(it) }
+            }
+        }
+        context.append(statement)
+
+        return JsirExpression.Undefined
+    }
+
+    override fun visitDoWhileExpression(expression: KtDoWhileExpression, data: JsirContext) = generateDoWhile(expression, null)
+
+    private fun generateDoWhile(expression: KtDoWhileExpression, label: String?): JsirExpression {
+        val statement = JsirStatement.DoWhile(JsirExpression.True)
+        context.nestedLabel(label, statement, true, true) {
+            context.nestedBlock(statement.body) {
+                val block = JsirStatement.Block()
+                context.append(block)
+                context.nestedBlock(block.body) {
+                    context.withContinueReplacement(statement, block) {
+                        expression.body?.let { context.generate(it) }
+                    }
+                }
+                context.withSource(expression.condition) {
+                    val conditionalBreak = JsirStatement.If(context.generate(expression.condition!!).negate())
+                    context.append(conditionalBreak)
+                    context.nestedBlock(conditionalBreak.thenBody) {
+                        context.append(JsirStatement.Break(statement))
                     }
                 }
             }
-            context.append(statement)
         }
+        context.append(statement)
 
-        return JsirExpression.Null
+        return JsirExpression.Undefined
     }
 
     override fun visitTryExpression(expression: KtTryExpression, data: JsirContext?): JsirExpression {
-        val temporary = JsirVariable()
-        context.withSource(expression) {
-            val statement = JsirStatement.Try()
-            context.nestedBlock(statement.body) {
-                context.assign(temporary.makeReference(), context.generate(expression.tryBlock))
+        val temporary = JsirVariable().makeReference()
+        val statement = JsirStatement.Try()
+        context.nestedBlock(statement.body) {
+            context.assign(temporary, context.generate(expression.tryBlock))
+        }
+        for (clausePsi in expression.catchClauses) {
+            val catchVar = JsirVariable()
+            val catch = JsirStatement.Catch(catchVar).apply {
+                statement.catchClauses += this
             }
-            for (clausePsi in expression.catchClauses) {
-                val catchVar = JsirVariable()
-                val catch = JsirStatement.Catch(catchVar).apply {
-                    statement.catchClauses += this
-                }
-                context.nestedBlock(catch.body) {
-                    context.assign(temporary.makeReference(), context.generate(clausePsi.catchBody!!))
-                }
+            context.nestedBlock(catch.body) {
+                context.assign(temporary, context.generate(clausePsi.catchBody!!))
             }
-            val finallyPsi = expression.finallyBlock
-            if (finallyPsi != null) {
-                context.nestedBlock(statement.finallyClause) {
-                    context.generate(finallyPsi.finalExpression)
-                }
-            }
-
-            if (statement.catchClauses.isNotEmpty() || statement.finallyClause.isNotEmpty()) {
-                context.append(statement)
-            }
-            else {
-                context.appendAll(statement.body)
+        }
+        val finallyPsi = expression.finallyBlock
+        if (finallyPsi != null) {
+            context.nestedBlock(statement.finallyClause) {
+                context.generate(finallyPsi.finalExpression)
             }
         }
 
-        return temporary.makeReference()
+        if (statement.catchClauses.isNotEmpty() || statement.finallyClause.isNotEmpty()) {
+            context.append(statement)
+        }
+        else {
+            context.appendAll(statement.body)
+        }
+
+        return temporary
     }
 
     override fun visitSimpleNameExpression(expression: KtSimpleNameExpression, data: JsirContext?): JsirExpression {
         val resolvedCall = expression.getResolvedCall(context.bindingContext)!!
-        return context.generateInvocation(null, resolvedCall)
+        return context.generateInvocation(resolvedCall, null)
     }
 
     override fun visitQualifiedExpression(expression: KtQualifiedExpression, data: JsirContext?): JsirExpression {
         val selector = expression.selectorExpression
+        val receiverFactory = context.defaultReceiverFactory(expression.receiverExpression)
         return when (selector) {
             is KtCallExpression -> {
-                context.generateInvocation(expression.receiverExpression, selector.getResolvedCall(context.bindingContext)!!)
+                context.generateInvocation(selector.getResolvedCall(context.bindingContext)!!, receiverFactory)
             }
             else -> {
-                context.generateVariable(expression.receiverExpression, expression.getResolvedCall(context.bindingContext)!!).get()
+                context.generateVariable(expression.getResolvedCall(context.bindingContext)!!, receiverFactory).get()
             }
         }
     }
+
+    override fun visitArrayAccessExpression(expression: KtArrayAccessExpression, data: JsirContext?): JsirExpression {
+        return context.withSource(expression) { context.generateArrayVariable(expression).get() }
+    }
+
+    override fun visitPropertyAccessor(accessor: KtPropertyAccessor, data: JsirContext?): JsirExpression {
+        return generateFunctionDeclaration(accessor)
+    }
+
+    private fun generateFunctionDeclaration(functionPsi: KtDeclarationWithBody): JsirExpression {
+        if (!functionPsi.hasBody()) return JsirExpression.Undefined
+
+        val descriptor = context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, functionPsi] as FunctionDescriptor
+        context.nestedFunction(descriptor) {
+            val function = JsirFunction(descriptor)
+            for (parameter in descriptor.valueParameters) {
+                function.parameters += context.getVariable(parameter).localVariable
+            }
+
+            context.nestedBlock(function.body) {
+                for (parameterPsi in functionPsi.valueParameters) {
+                    val defaultValuePsi = parameterPsi.defaultValue ?: continue
+                    val parameter = context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, parameterPsi]
+                            as ValueParameterDescriptor
+                    val variable = context.getVariable(parameter)
+
+                    val isUndefined = JsirExpression.Binary(JsirBinaryOperation.REF_EQ, JsirType.ANY, variable.get(),
+                                                            JsirExpression.Undefined)
+                    val conditional = JsirStatement.If(isUndefined)
+                    context.nestedBlock(conditional.thenBody) {
+                        variable.set(context.generate(defaultValuePsi))
+                    }
+                    context.append(conditional)
+                }
+
+                val returnValue = context.generate(functionPsi.bodyExpression!!)
+                context.append(JsirStatement.Return(returnValue, descriptor))
+            }
+
+            context.pool.addFunction(function)
+        }
+
+        return JsirExpression.Undefined
+    }
 }
+
