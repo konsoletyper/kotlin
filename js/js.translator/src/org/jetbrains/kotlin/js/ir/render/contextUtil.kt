@@ -16,19 +16,7 @@
 
 package org.jetbrains.kotlin.js.ir.render
 
-import com.google.dart.compiler.backend.js.ast.JsExpression
 import com.google.dart.compiler.backend.js.ast.JsName
-import com.google.dart.compiler.backend.js.ast.JsScope
-import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
-import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.js.ir.JsirExpression
 
-interface JsirRenderingContext {
-    val scope: JsScope
-
-    val module: ModuleDescriptor
-
-    fun renderExpression(expression: JsirExpression): JsExpression
-
-    fun getInternalName(descriptor: DeclarationDescriptor): JsName
-}
+val JsirRenderingContext.kotlinName: JsName
+    get() = getInternalName(module.builtIns.builtInsModule)

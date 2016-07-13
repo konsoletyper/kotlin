@@ -17,23 +17,13 @@
 package org.jetbrains.kotlin.js.ir
 
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.VariableDescriptorWithAccessors
 
-class JsirPool(val module: ModuleDescriptor) {
-    private val functionMap = mutableMapOf<FunctionDescriptor, JsirFunction>()
+class JsirFunction(val declaration: FunctionDescriptor) {
+    val parameters = mutableListOf<JsirVariable>()
+    val body = mutableListOf<JsirStatement>()
+}
 
-    val functions: Map<FunctionDescriptor, JsirFunction> = functionMap
-
-    private val propertySet = mutableMapOf<VariableDescriptorWithAccessors, JsirProperty>()
-
-    val properties: Map<VariableDescriptorWithAccessors, JsirProperty> = propertySet
-
-    fun addFunction(function: JsirFunction) {
-        functionMap[function.declaration] = function
-    }
-
-    fun addProperty(property: JsirProperty) {
-        propertySet[property.declaration] = property
-    }
+class JsirProperty(val declaration: VariableDescriptorWithAccessors) {
+    val initializerBody = mutableListOf<JsirStatement>()
 }

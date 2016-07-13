@@ -42,6 +42,7 @@ internal fun JsirContext.generateBinary(expression: KtBinaryExpression): JsirExp
             JsirExpression.Null
         }
         operationDescriptor != null && JsDescriptorUtils.isCompareTo(operationDescriptor) -> generateCompareTo(expression)
+        operation == KtTokens.EXCLEQ -> generateInvocation(expression.left!!, expression.getResolvedCall(bindingContext)!!).negate()
         else -> generateInvocation(expression.left!!, expression.getResolvedCall(bindingContext)!!)
     }
 }

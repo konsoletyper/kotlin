@@ -17,18 +17,15 @@
 package org.jetbrains.kotlin.js.ir.render
 
 import com.google.dart.compiler.backend.js.ast.JsExpression
-import com.google.dart.compiler.backend.js.ast.JsName
-import com.google.dart.compiler.backend.js.ast.JsScope
-import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
-import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.js.ir.JsirExpression
+import com.google.dart.compiler.backend.js.ast.JsInvocation
+import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
 
-interface JsirRenderingContext {
-    val scope: JsScope
+class ToStringRenderer : AnyMethodRenderer() {
+    override fun matchNameAndArgumentCount(name: String, argumentCount: Int): Boolean {
+        return name == "toString" && argumentCount == 0
+    }
 
-    val module: ModuleDescriptor
-
-    fun renderExpression(expression: JsirExpression): JsExpression
-
-    fun getInternalName(descriptor: DeclarationDescriptor): JsName
+    override fun render(context: JsirRenderingContext, receiver: JsExpression, arguments: List<JsExpression>): JsExpression {
+        return JsInvocation(JsAstUtils.pureFqn("toString", receiver))
+    }
 }

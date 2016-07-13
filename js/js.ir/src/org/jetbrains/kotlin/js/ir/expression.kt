@@ -17,7 +17,10 @@
 package org.jetbrains.kotlin.js.ir
 
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.ConstructorDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.descriptors.VariableDescriptor
 
 sealed class JsirExpression {
     var source: PsiElement? = null
@@ -123,13 +126,8 @@ enum class JsirType {
     ANY
 }
 
-class JsirFunction(val declaration: CallableDescriptor) {
-    val parameters = mutableListOf<JsirVariable>()
-    val body = mutableListOf<JsirStatement>()
-}
-
 sealed class JsirField {
-    class Backing(val property: PropertyDescriptor) : JsirField()
+    class Backing(val property: VariableDescriptor) : JsirField()
 
     class OuterClass(val classDescriptor: ClassDescriptor) : JsirField()
 }

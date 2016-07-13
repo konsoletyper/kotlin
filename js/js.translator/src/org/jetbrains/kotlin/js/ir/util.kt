@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.js.ir
 
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 
 val FunctionDescriptor.receiverClass: ClassDescriptor?
     get() = (extensionReceiverParameter?.containingDeclaration ?: containingDeclaration) as? ClassDescriptor
@@ -32,4 +33,10 @@ fun getPrimitiveType(name: String) = when (name) {
     "kotlin.Double" -> JsirType.DOUBLE
     "kotlin.Char" -> JsirType.CHAR
     else -> JsirType.ANY
+}
+
+fun FunctionDescriptor.isAnyFunction(): Boolean {
+    val container = containingDeclaration as? ClassDescriptor ?: return false
+    if (container.fqNameSafe.asString() == "kotlin.Any") return true
+    return overriddenDescriptors.any { it.isAnyFunction() }
 }

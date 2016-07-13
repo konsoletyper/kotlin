@@ -160,11 +160,26 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             }
 
             context.nestedBlock(function.body) {
+                for (parameterPsi in functionPsi.valueParameterList?.parameters.orEmpty()) {
+                    val defaultValuePsi = parameterPsi.defaultValue ?: continue
+                    val parameter = context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, parameterPsi]
+                            as ValueParameterDescriptor
+                    val variable = context.getVariable(parameter)
+
+                    val isUndefined = JsirExpression.Binary(JsirBinaryOperation.REF_EQ, JsirType.ANY, variable.get(),
+                                                            JsirExpression.Undefined)
+                    val conditional = JsirStatement.If(isUndefined)
+                    context.nestedBlock(conditional.thenBody) {
+                        variable.set(context.generate(defaultValuePsi))
+                    }
+                    context.append(conditional)
+                }
+
                 val returnValue = context.generate(functionPsi.bodyExpression!!)
                 context.append(JsirStatement.Return(returnValue, descriptor))
             }
 
-            context.pool.addFunction(descriptor, function)
+            context.pool.addFunction(function)
         }
 
         return JsirExpression.Null
@@ -190,16 +205,60 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         return context.generateInvocation(qualifier, resolvedCall)
     }
 
-    override fun visitProperty(property: KtProperty, data: JsirContext): JsirExpression {
-        val descriptor = context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, property]
+    override fun visitProperty(propertyPsi: KtProperty, data: JsirContext): JsirExpression {
+        val descriptor = context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, propertyPsi]
         if (context.declaration is FunctionDescriptor) {
             val variable = descriptor as VariableDescriptor
-            val initializer = property.initializer
+            val initializer = propertyPsi.initializer
             if (initializer != null) {
                 context.getVariable(variable).set(context.generate(initializer))
             }
         }
+        else {
+            val variable = descriptor as VariableDescriptorWithAccessors
+            val propertyDeclaration = JsirProperty(variable)
+            val initializer = propertyPsi.initializer
+            if (initializer != null) {
+                context.nestedBlock(propertyDeclaration.initializerBody) {
+                    val receiver = if (variable.containingDeclaration is ClassDescriptor) JsirExpression.This else null
+                    val access = JsirExpression.FieldAccess(receiver, JsirField.Backing(variable))
+                    context.assign(access, context.generate(initializer))
+                }
+            }
+
+            context.pool.addProperty(propertyDeclaration)
+            generateAccessor(propertyPsi.getter, variable.getter)
+            generateAccessor(propertyPsi.setter, variable.setter)
+        }
         return JsirExpression.Null
+    }
+
+    private fun generateAccessor(psi: KtPropertyAccessor?, accessor: VariableAccessorDescriptor?) {
+        if (accessor == null) return
+
+        if (psi != null) {
+            context.generate(psi)
+        }
+        else {
+            val function = JsirFunction(accessor)
+            val isGetter = accessor.valueParameters.isEmpty()
+            val receiver = if (accessor.correspondingVariable.containingDeclaration is ClassDescriptor) {
+                JsirExpression.This
+            }
+            else {
+                null
+            }
+            val access = JsirExpression.FieldAccess(receiver, JsirField.Backing(accessor.correspondingVariable))
+            if (isGetter) {
+                function.body += JsirStatement.Return(access, accessor)
+            }
+            else {
+                val parameter = JsirVariable(accessor.correspondingVariable.name.asString())
+                function.parameters += parameter
+                function.body += JsirStatement.Assignment(access, JsirExpression.VariableReference(parameter))
+            }
+            context.pool.addFunction(function)
+        }
     }
 
     override fun visitIfExpression(expression: KtIfExpression, data: JsirContext): JsirExpression {

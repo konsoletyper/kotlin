@@ -43,25 +43,38 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
 
 object JsirRenderer {
     fun render(pool: JsirPool): JsProgram {
-        val rendererImpl = JsirRendererImpl(pool)
-        rendererImpl.render()
-        return rendererImpl.program
+        val program = JsProgram("")
+        program.globalBlock.statements += JsExpressionStatement(render(pool, program))
+        return program
+    }
+
+    fun render(pool: JsirPool, program: JsProgram): JsFunction {
+        val rendererImpl = JsirRendererImpl(pool, program)
+        return rendererImpl.render()
     }
 }
 
-private class JsirRendererImpl(val pool: JsirPool) {
-    val program = JsProgram("")
+private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
+    val invocationRenderers = listOf(EqualsRenderer(), ToStringRenderer())
+    val invocationRendererCache = mutableMapOf<FunctionDescriptor, InvocationRenderer?>()
     val wrapperFunction = JsFunction(program.rootScope, JsBlock(), "wrapper")
     val importsSection = JsBlock()
     val internalNameCache = mutableMapOf<DeclarationDescriptor, JsName>()
     val module = pool.module
 
-    fun render() {
+    fun render(): JsFunction {
+        val initRenderer = StatementRenderer(wrapperFunction)
+        for (property in pool.properties.values) {
+            wrapperFunction.body.statements += JsVars(JsVars.JsVar(getInternalName(property.declaration)))
+            wrapperFunction.body.statements += property.initializerBody.flatMap { initRenderer.renderStatement(it) }
+        }
+
         for (function in pool.functions.values) {
             wrapperFunction.body.statements += FunctionRenderer(function).render().makeStmt()
         }
+
         wrapperFunction.body.statements.addAll(0, importsSection.statements)
-        program.globalBlock.statements += JsExpressionStatement(wrapperFunction)
+        return wrapperFunction
     }
 
     private fun getExternalName(descriptor: DeclarationDescriptor): JsExpression {
@@ -82,7 +95,7 @@ private class JsirRendererImpl(val pool: JsirPool) {
 
     private fun getInternalName(descriptor: DeclarationDescriptor): JsName {
         return if (descriptor !in internalNameCache) {
-            val name = generateInternalName(descriptor)
+            val name = if (descriptor == descriptor.original) generateInternalName(descriptor) else getInternalName(descriptor.original)
             internalNameCache[descriptor] = name
             if (descriptor !is ModuleDescriptor) {
                 val module = DescriptorUtils.getContainingModule(descriptor)
@@ -151,12 +164,8 @@ private class JsirRendererImpl(val pool: JsirPool) {
         }
     }
 
-    inner class FunctionRenderer(val function: JsirFunction) : JsirRenderingContext {
-        val jsFunction = JsFunction(wrapperFunction.scope, JsBlock(), function.declaration.toString())
-        val labelNames = mutableMapOf<JsirLabeled, JsName>()
-        val variableNames = mutableMapOf<JsirVariable, JsName>()
-        override var scope: JsScope = jsFunction.scope
-
+    inner class FunctionRenderer(val function: JsirFunction)
+            : StatementRenderer(JsFunction(wrapperFunction.scope, JsBlock(), function.declaration.toString())) {
         fun render(): JsFunction {
             jsFunction.name = getInternalName(function.declaration)
             jsFunction.parameters += function.parameters.map { JsParameter(it.getJsName()) }
@@ -169,6 +178,21 @@ private class JsirRendererImpl(val pool: JsirPool) {
             }
 
             return jsFunction
+        }
+    }
+
+    inner open class StatementRenderer(val jsFunction: JsFunction) : JsirRenderingContext {
+        val labelNames = mutableMapOf<JsirLabeled, JsName>()
+        val variableNames = mutableMapOf<JsirVariable, JsName>()
+        override var scope: JsScope = jsFunction.scope
+
+        override val module: ModuleDescriptor
+            get() = this@JsirRendererImpl.module
+
+        override fun getInternalName(descriptor: DeclarationDescriptor) = this@JsirRendererImpl.getInternalName(descriptor)
+
+        fun getInvocationRenderer(function: FunctionDescriptor) = invocationRendererCache.getOrPut(function) {
+            invocationRenderers.firstOrNull { it.isApplicable(function) }
         }
 
         fun JsirStatement.render(): List<JsStatement> = when (this) {
@@ -291,13 +315,17 @@ private class JsirRendererImpl(val pool: JsirPool) {
             }
         }
 
-        private fun JsirLabeled.getJsName(): JsName = labelNames.getOrPut(this) {
+        fun JsirLabeled.getJsName(): JsName = labelNames.getOrPut(this) {
             scope.declareFreshName(suggestedLabelName ?: "\$label")
         }
 
-        private fun JsirVariable.getJsName(): JsName = variableNames.getOrPut(this) {
+        fun JsirVariable.getJsName(): JsName = variableNames.getOrPut(this) {
             scope.declareFreshName(suggestedName ?: "\$tmp")
         }
+
+        fun renderStatement(statement: JsirStatement) = statement.render()
+
+        override fun renderExpression(expression: JsirExpression) = expression.render()
 
         fun JsirExpression.render(): JsExpression = when (this) {
             is JsirExpression.Constant -> {
@@ -359,20 +387,26 @@ private class JsirRendererImpl(val pool: JsirPool) {
                     value
                 }
                 else {
-                    val jsReceiver = receiver?.render()
-                    val jsArgs = arguments.map { it.render() }.toTypedArray()
-                    if (jsReceiver != null) {
-                        if (virtual) {
-                            JsInvocation(JsNameRef(getSuggestedName(function), jsReceiver), *jsArgs)
-                        }
-                        else {
-                            val className = getInternalName(function.containingDeclaration)
-                            val methodRef = JsNameRef(getSuggestedName(function), JsNameRef("prototype", JsNameRef(className)))
-                            JsInvocation(JsNameRef("call", methodRef), *(arrayOf(jsReceiver) + jsArgs))
-                        }
+                    val invocationRenderer = getInvocationRenderer(function)
+                    if (invocationRenderer != null) {
+                        invocationRenderer.render(this, this@StatementRenderer)
                     }
                     else {
-                        JsInvocation(JsNameRef(getInternalName(function)), *jsArgs)
+                        val jsReceiver = receiver?.render()
+                        val jsArgs = arguments.map { it.render() }.toTypedArray()
+                        if (jsReceiver != null) {
+                            if (virtual) {
+                                JsInvocation(JsNameRef(getSuggestedName(function), jsReceiver), *jsArgs)
+                            }
+                            else {
+                                val className = getInternalName(function.containingDeclaration)
+                                val methodRef = JsNameRef(getSuggestedName(function), JsNameRef("prototype", JsNameRef(className)))
+                                JsInvocation(JsNameRef("call", methodRef), *(arrayOf(jsReceiver) + jsArgs))
+                            }
+                        }
+                        else {
+                            JsInvocation(JsNameRef(getInternalName(function)), *jsArgs)
+                        }
                     }
                 }
             }
@@ -444,17 +478,17 @@ private class JsirRendererImpl(val pool: JsirPool) {
         }
 
         @JvmName("renderStatements")
-        private fun List<JsirStatement>.render() = flatMap { it.render() }
+        fun List<JsirStatement>.render() = flatMap { it.render() }
 
-        private fun List<JsStatement>.asStatementOrNull() = when (size) {
+        fun List<JsStatement>.asStatementOrNull() = when (size) {
             0 -> null
             1 -> this[0]
             else -> JsBlock(this)
         }
 
-        private fun List<JsStatement>.asStatement() = asStatementOrNull() ?: JsBlock()
+        fun List<JsStatement>.asStatement() = asStatementOrNull() ?: JsBlock()
 
         @JvmName("renderExpressions")
-        private fun List<JsirExpression>.render() = map { it.render() }
+        fun List<JsirExpression>.render() = map { it.render() }
     }
 }
