@@ -90,7 +90,6 @@ public final class K2JSTranslator {
         transformer.transform(pool);
 
         JsProgram altProgram = JsirRenderer.INSTANCE.render(irGenerator.getContext().getPool());
-        System.out.println(altProgram.getGlobalBlock().toString());
 
         TranslationContext context = Translation.generateAst(bindingTrace, files, mainCallParameters, moduleDescriptor, config);
         ProgressIndicatorAndCompilationCanceledStatus.checkCanceled();
@@ -104,6 +103,6 @@ public final class K2JSTranslator {
         ProgressIndicatorAndCompilationCanceledStatus.checkCanceled();
 
         List<String> importedModules = new ArrayList<String>(context.getImportedModules().keySet());
-        return new TranslationResult.Success(config, files, program, diagnostics, importedModules, moduleDescriptor);
+        return new TranslationResult.Success(config, files, altProgram, diagnostics, importedModules, moduleDescriptor);
     }
 }

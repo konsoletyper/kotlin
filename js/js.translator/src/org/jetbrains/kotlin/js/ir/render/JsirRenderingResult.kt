@@ -18,4 +18,4 @@ package org.jetbrains.kotlin.js.ir.render
 
 import com.google.dart.compiler.backend.js.ast.JsFunction
 
-class JsirRenderingResult(val function: JsFunction)
+class JsirRenderingResult(val function: JsFunction, val modules: List<String>)

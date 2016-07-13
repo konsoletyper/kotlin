@@ -37,20 +37,41 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.ir.*
 import org.jetbrains.kotlin.js.translate.context.Namer
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
+import org.jetbrains.kotlin.js.translate.utils.ManglingUtils
+import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.psiUtil.getTextWithLocation
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
+import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyPublicApi
 
 object JsirRenderer {
     fun render(pool: JsirPool): JsProgram {
         val program = JsProgram("")
-        program.globalBlock.statements += JsExpressionStatement(render(pool, program))
+        val result = render(pool, program)
+        val arguments = result.modules.map { makePlainModuleRef(it, program) }
+
+        val invocation = JsInvocation(result.function, arguments)
+        val selfName = pool.module.importName
+        val assignment = JsAstUtils.assignment(makePlainModuleRef(selfName, program), invocation)
+        program.globalBlock.statements += assignment.makeStmt()
+
         return program
     }
 
-    fun render(pool: JsirPool, program: JsProgram): JsFunction {
+    fun render(pool: JsirPool, program: JsProgram): JsirRenderingResult {
         val rendererImpl = JsirRendererImpl(pool, program)
-        return rendererImpl.render()
+        val wrapperFunction = rendererImpl.render()
+        return JsirRenderingResult(wrapperFunction, rendererImpl.moduleNames)
+    }
+
+    private fun makePlainModuleRef(moduleId: String, program: JsProgram): JsExpression {
+        return if (Namer.requiresEscaping(moduleId)) {
+            JsArrayAccess(JsLiteral.THIS, program.getStringLiteral(moduleId))
+        }
+        else {
+            program.scope.declareName(moduleId).makeRef()
+        }
     }
 }
 
@@ -60,7 +81,9 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     val wrapperFunction = JsFunction(program.rootScope, JsBlock(), "wrapper")
     val importsSection = JsBlock()
     val internalNameCache = mutableMapOf<DeclarationDescriptor, JsName>()
+    val rootPackage = Package()
     val module = pool.module
+    val moduleNames = mutableListOf<String>()
 
     fun render(): JsFunction {
         val initRenderer = StatementRenderer(wrapperFunction)
@@ -74,7 +97,73 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         }
 
         wrapperFunction.body.statements.addAll(0, importsSection.statements)
+
+        exportTopLevel()
+        val topLevel = getInternalName(module)
+        wrapperFunction.body.statements += JsVars(JsVars.JsVar(topLevel, rootPackage.jsObject))
+        exportTopLevelProperties()
+
+        val defineModuleRef = JsNameRef("defineModule", getInternalName(module.builtIns.builtInsModule).makeRef())
+        val defineModule = JsInvocation(defineModuleRef, program.getStringLiteral(module.importName), topLevel.makeRef())
+        wrapperFunction.body.statements += defineModule.makeStmt()
+
+        wrapperFunction.body.statements += JsReturn(topLevel.makeRef())
+
         return wrapperFunction
+    }
+
+    fun exportTopLevel() {
+        for (function in pool.functions.keys.filter { it !is VariableAccessorDescriptor && it.isEffectivelyPublicApi }) {
+            val container = function.containingDeclaration as? PackageFragmentDescriptor ?: continue
+            val name = ManglingUtils.getSuggestedName(function)
+            val jsPackage = getPackage(container.fqName)
+            val key = jsPackage.scope.declareName(name).makeRef()
+            jsPackage.jsObject.propertyInitializers += JsPropertyInitializer(key, getInternalName(function).makeRef())
+        }
+    }
+
+    fun exportTopLevelProperties() {
+        for (property in pool.properties.keys.filter { it.isEffectivelyPublicApi }) {
+            val container = property.containingDeclaration as? PackageFragmentDescriptor ?: continue
+            val name = ManglingUtils.getSuggestedName(property)
+
+            val jsPackage = getPackageRef(container.fqName)
+            val jsLiteral = JsObjectLiteral(true)
+
+            jsLiteral.propertyInitializers += JsPropertyInitializer(JsNameRef("get"), getInternalName(property.getter!!).makeRef())
+            val setter = property.setter
+            if (setter != null) {
+                jsLiteral.propertyInitializers += JsPropertyInitializer(JsNameRef("set"), getInternalName(setter).makeRef())
+            }
+
+            val definition = JsInvocation(JsNameRef("defineProperty", "Object"), jsPackage, program.getStringLiteral(name), jsLiteral)
+            wrapperFunction.body.statements += definition.makeStmt()
+        }
+    }
+
+    fun getPackage(fqn: FqName): Package {
+        var currentPackage = rootPackage
+        for (segment in fqn.pathSegments()) {
+            val next = currentPackage.innerPackages.getOrPut(segment) {
+                Package().apply {
+                    val name = segment.asString()
+                    val key = currentPackage.scope.declareName(name).makeRef()
+                    currentPackage.jsObject.propertyInitializers += JsPropertyInitializer(key, jsObject)
+                }
+            }
+            currentPackage = next
+        }
+        return currentPackage
+    }
+
+    fun getPackageRef(fqn: FqName): JsExpression {
+        return fqn.pathSegments().fold(getInternalName(module).makeRef()) { qualifier, name -> JsNameRef(name.asString(), qualifier) }
+    }
+
+    inner class Package {
+        val jsObject = JsObjectLiteral(true)
+        val scope = JsObjectScope(program.scope, "")
+        val innerPackages = mutableMapOf<Name, Package>()
     }
 
     private fun getExternalName(descriptor: DeclarationDescriptor): JsExpression {
@@ -116,17 +205,20 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                 wrapperFunction.scope.declareFreshName("_")
             }
             else {
-                val name = if (descriptor.builtIns.builtInsModule == descriptor) {
-                    wrapperFunction.scope.declareFreshName("kotlin")
+                val (name, importName) = if (descriptor.builtIns.builtInsModule == descriptor) {
+                    Pair(wrapperFunction.scope.declareFreshName("kotlin"), "kotlin")
                 }
                 else {
                     val moduleName = descriptor.name.asString().let { it.substring(1, it.length - 1) }
                     if (moduleName == "kotlin") {
                         return getInternalName(descriptor.builtIns.builtInsModule)
                     }
-                    wrapperFunction.scope.declareFreshName(Namer.LOCAL_MODULE_PREFIX + Namer.suggestedModuleName(moduleName))
+                    val internalName = wrapperFunction.scope.declareFreshName(Namer.LOCAL_MODULE_PREFIX +
+                                                                              Namer.suggestedModuleName(moduleName))
+                    Pair(internalName, moduleName)
                 }
                 wrapperFunction.parameters += JsParameter(name)
+                moduleNames += importName
                 name
             }
         }

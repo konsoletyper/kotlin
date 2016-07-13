@@ -17,6 +17,10 @@
 package org.jetbrains.kotlin.js.ir.render
 
 import com.google.dart.compiler.backend.js.ast.JsName
+import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 
 val JsirRenderingContext.kotlinName: JsName
     get() = getInternalName(module.builtIns.builtInsModule)
+
+val ModuleDescriptor.importName: String
+        get() = name.asString().let { it.substring(1, it.length - 1) }
