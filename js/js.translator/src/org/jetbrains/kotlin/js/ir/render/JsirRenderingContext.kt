@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.js.ir.render
 import com.google.dart.compiler.backend.js.ast.JsExpression
 import com.google.dart.compiler.backend.js.ast.JsName
 import com.google.dart.compiler.backend.js.ast.JsScope
+import com.google.dart.compiler.backend.js.ast.JsStringLiteral
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.js.ir.JsirExpression
@@ -31,4 +32,6 @@ interface JsirRenderingContext {
     fun renderExpression(expression: JsirExpression): JsExpression
 
     fun getInternalName(descriptor: DeclarationDescriptor): JsName
+
+    fun getStringLiteral(value: String): JsStringLiteral
 }

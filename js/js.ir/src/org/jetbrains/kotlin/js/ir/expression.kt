@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.ConstructorDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.VariableDescriptor
+import org.jetbrains.kotlin.types.KotlinType
 
 sealed class JsirExpression {
     var source: PsiElement? = null
@@ -79,6 +80,10 @@ sealed class JsirExpression {
 
     class Unary(var operation: JsirUnaryOperation, var type: JsirType, var operand: JsirExpression) : JsirExpression()
 
+    class InstanceOf(var value: JsirExpression, var type: KotlinType) : JsirExpression()
+
+    class Cast(var value: JsirExpression, var type: KotlinType) : JsirExpression()
+
     class NewNullPointerExpression : JsirExpression()
 }
 
@@ -117,6 +122,7 @@ enum class JsirUnaryOperation {
     ARRAY_COPY
 }
 
+// TODO: use PrimitiveType? instead
 enum class JsirType {
     BOOLEAN,
     BYTE,

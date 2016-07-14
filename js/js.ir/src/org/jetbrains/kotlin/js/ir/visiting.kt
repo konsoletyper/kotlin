@@ -108,6 +108,13 @@ fun <S, E> JsirExpression.visit(visitor: JsirVisitor<S, E>): E = visitor.accept(
         arguments.visit(visitor)
     })
 
+    is JsirExpression.InstanceOf -> ({
+        value.visit(visitor)
+    })
+    is JsirExpression.Cast -> ({
+        value.visit(visitor)
+    })
+
     is JsirExpression.NewNullPointerExpression,
     is JsirExpression.VariableReference,
     is JsirExpression.Constant,
@@ -245,6 +252,15 @@ fun JsirExpression.replace(mapper: JsirMapper): JsirExpression = when (this) {
     }
     is JsirExpression.FieldAccess -> {
         receiver = receiver?.replace(mapper)
+        mapper.map(this)
+    }
+
+    is JsirExpression.InstanceOf -> {
+        value = value.replace(mapper)
+        mapper.map(this)
+    }
+    is JsirExpression.Cast -> {
+        value = value.replace(mapper)
         mapper.map(this)
     }
 }

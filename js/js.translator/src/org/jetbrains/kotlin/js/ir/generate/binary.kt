@@ -43,8 +43,16 @@ internal fun JsirContext.generateBinary(expression: KtBinaryExpression): JsirExp
         operation == KtTokens.EXCLEQ -> generateInvocation(expression.getResolvedCall(bindingContext)!!, receiverFactory).negate()
         operation == KtTokens.ANDAND -> generateLogical(expression, false)
         operation == KtTokens.OROR -> generateLogical(expression, true)
+        operation == KtTokens.IN_KEYWORD -> generateIn(expression)
+        operation == KtTokens.NOT_IN -> generateIn(expression).negate()
         else -> generateInvocation(expression.getResolvedCall(bindingContext)!!, receiverFactory)
     }
+}
+
+private fun JsirContext.generateIn(expression: KtBinaryExpression): JsirExpression {
+    val receiverFactory = defaultReceiverFactory(expression.right!!)
+    val argumentsFactory = { listOf(listOf(generate(expression.left!!))) }
+    return generateInvocation(expression.getResolvedCall(bindingContext)!!, argumentsFactory, receiverFactory)
 }
 
 private fun JsirContext.generateElvis(leftPsi: KtExpression, rightPsi: KtExpression): JsirExpression {

@@ -18,7 +18,6 @@ package org.jetbrains.kotlin.js.ir.render
 
 import com.google.dart.compiler.backend.js.ast.JsExpression
 import com.google.dart.compiler.backend.js.ast.JsInvocation
-import org.jetbrains.kotlin.js.translate.utils.JsAstUtils.pureFqn
 
 class EqualsRenderer : AnyMethodRenderer() {
     override fun matchNameAndArgumentCount(name: String, argumentCount: Int): Boolean {
@@ -26,6 +25,6 @@ class EqualsRenderer : AnyMethodRenderer() {
     }
 
     override fun render(context: JsirRenderingContext, receiver: JsExpression, arguments: List<JsExpression>): JsExpression {
-        return JsInvocation(pureFqn("equals", pureFqn(context.kotlinName, null)), receiver, arguments[0])
+        return JsInvocation(context.kotlinReference("equals"), receiver, arguments[0])
     }
 }

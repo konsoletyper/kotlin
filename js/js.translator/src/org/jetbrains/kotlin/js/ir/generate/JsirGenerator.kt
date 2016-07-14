@@ -20,6 +20,7 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.ir.*
 import org.jetbrains.kotlin.js.resolve.diagnostics.ErrorsJs
 import org.jetbrains.kotlin.js.translate.utils.BindingUtils
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getTextWithLocation
 import org.jetbrains.kotlin.resolve.BindingContext
@@ -217,7 +218,24 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     override fun visitBinaryWithTypeRHSExpression(expression: KtBinaryExpressionWithTypeRHS, data: JsirContext?): JsirExpression {
-        return context.generate(expression.left)
+        return when (expression.operationReference.getReferencedNameElementType()) {
+            KtTokens.AS_KEYWORD,
+            KtTokens.AS_SAFE -> generateBinaryWithTypeBase(expression.left, expression.right!!)
+            else -> super.visitBinaryWithTypeRHSExpression(expression, data)
+        }
+    }
+
+    private fun generateBinaryWithTypeBase(left: KtExpression, right: KtTypeReference): JsirExpression {
+        val sourceType = BindingUtils.getTypeForExpression(context.bindingContext, left)
+        val type = BindingUtils.getTypeByReference(context.bindingContext, right)
+        return context.generateCast(context.generate(left), sourceType, type)
+    }
+
+    override fun visitIsExpression(expression: KtIsExpression, data: JsirContext?): JsirExpression {
+        val sourceType = BindingUtils.getTypeForExpression(context.bindingContext, expression.leftHandSide)
+        val type = BindingUtils.getTypeByReference(context.bindingContext, expression.typeReference!!)
+        val result = context.generateInstanceOf(context.generate(expression.leftHandSide), sourceType, type)
+        return if (expression.isNegated) result.negate() else result
     }
 
     override fun visitProperty(propertyPsi: KtProperty, data: JsirContext): JsirExpression {
@@ -295,6 +313,8 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
 
         return temporary.makeReference()
     }
+
+    override fun visitWhenExpression(expression: KtWhenExpression, data: JsirContext?) = context.generateWhen(expression)
 
     override fun visitWhileExpression(expression: KtWhileExpression, data: JsirContext?) = generateWhile(expression, null)
 

@@ -228,6 +228,17 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
         writer.constant("kotlin-NPE")
     }
 
+    is JsirExpression.InstanceOf -> {
+        writer.block("instance-of '$type'") {
+            value.prettyPrint(writer)
+        }
+    }
+    is JsirExpression.Cast -> {
+        writer.block("cast-to '$type'") {
+            value.prettyPrint(writer)
+        }
+    }
+
     is JsirExpression.Constant -> {
         val value = this.value
         writer.constant(when (value) {

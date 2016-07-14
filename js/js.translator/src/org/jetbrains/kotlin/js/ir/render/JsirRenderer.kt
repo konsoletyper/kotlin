@@ -85,7 +85,7 @@ object JsirRenderer {
 }
 
 private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
-    val invocationRenderers = listOf(EqualsRenderer(), ToStringRenderer())
+    val invocationRenderers = listOf(EqualsRenderer(), ToStringRenderer(), RangeMethodRenderer())
     val invocationRendererCache = mutableMapOf<FunctionDescriptor, InvocationRenderer?>()
     val wrapperFunction = JsFunction(program.rootScope, JsBlock(), "wrapper")
     val importsSection = mutableListOf<JsStatement>()
@@ -297,6 +297,8 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             invocationRenderers.firstOrNull { it.isApplicable(function) }
         }
 
+        override fun getStringLiteral(value: String) = program.getStringLiteral(value)
+
         fun JsirStatement.render(): List<JsStatement> = when (this) {
             is JsirStatement.Assignment -> {
                 val left = this.left
@@ -464,7 +466,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                 val result: JsExpression = when (operation) {
                     JsirBinaryOperation.ARRAY_GET -> JsArrayAccess(left.render(), right.render())
                     JsirBinaryOperation.EQUALS_METHOD -> {
-                        JsInvocation(pureFqn("equals", pureFqn(kotlinName, null)), left.render(), right.render())
+                        JsInvocation(kotlinReference("equals"), left.render(), right.render())
                     }
                     JsirBinaryOperation.COMPARE -> {
                         val kotlinName = getInternalName(module.builtIns.builtInsModule)
@@ -518,12 +520,14 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                         val jsReceiver = receiver?.render()
                         val jsArgs = arguments.map { it.render() }.toTypedArray()
                         if (jsReceiver != null) {
+                            val overriddenFunction = generateSequence(function.original) { it.overriddenDescriptors.firstOrNull() }.last()
+                            val functionName = ManglingUtils.getSuggestedName(overriddenFunction.original)
                             if (virtual) {
-                                JsInvocation(pureFqn(getSuggestedName(function), jsReceiver), *jsArgs)
+                                JsInvocation(pureFqn(functionName, jsReceiver), *jsArgs)
                             }
                             else {
                                 val className = getInternalName(function.containingDeclaration)
-                                val methodRef = pureFqn(getSuggestedName(function), pureFqn("prototype", pureFqn(className, null)))
+                                val methodRef = pureFqn(functionName, pureFqn("prototype", pureFqn(className, null)))
                                 JsInvocation(pureFqn("call", methodRef), *(arrayOf(jsReceiver) + jsArgs))
                             }
                         }
@@ -568,6 +572,13 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             }
             is JsirExpression.ArrayOf -> {
                 JsArrayLiteral(elements.render())
+            }
+
+            is JsirExpression.InstanceOf -> renderInstanceOf(value.render(), type)
+            is JsirExpression.Cast -> {
+                val variable = scope.declareFreshName("\$cast")
+                val test = renderInstanceOf(JsAstUtils.assignment(variable.makeRef(), value.render()), type)
+                JsConditional(test, variable.makeRef(), JsInvocation(kotlinReference("throwCCE")))
             }
         }
 

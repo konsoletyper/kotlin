@@ -112,14 +112,19 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
     }
 
     fun nestedBlock(body: MutableList<JsirStatement>, action: () -> Unit) {
-        val backup = resultingStatements
+        val exit = enterBlock(body)
         try {
-            resultingStatements = body
             action()
         }
         finally {
-            resultingStatements = backup
+            exit()
         }
+    }
+
+    fun enterBlock(body: MutableList<JsirStatement>): () -> Unit {
+        val backup = resultingStatements
+        resultingStatements = body
+        return { resultingStatements = backup }
     }
 
     fun nestedFunction(function: FunctionDescriptor, action: () -> Unit) {

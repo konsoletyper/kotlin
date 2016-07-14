@@ -173,4 +173,4 @@ internal fun JsirContext.generateThis(descriptor: ClassDescriptor): JsirExpressi
     return result
 }
 
-internal fun JsirContext.defaultReceiverFactory(psi: KtExpression?): (() -> JsirExpression)? = psi?.let { ({ generate(it) }) }
+internal fun JsirContext.defaultReceiverFactory(psi: KtExpression?): (() -> JsirExpression)? = psi?.let { ({ memoize(it) }) }
