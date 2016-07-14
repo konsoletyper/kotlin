@@ -18,6 +18,8 @@ package org.jetbrains.kotlin.js.ir.transform.intrinsics
 
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.ir.JsirExpression
+import org.jetbrains.kotlin.js.ir.JsirType
+import org.jetbrains.kotlin.js.ir.JsirUnaryOperation
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
 
 class ArrayOfInstrinsic() : Intrinsic {
@@ -31,7 +33,7 @@ class ArrayOfInstrinsic() : Intrinsic {
         val argument = invocation.arguments[0]
         return when (argument) {
             is JsirExpression.ArrayOf -> argument
-            else -> JsirExpression.ArrayCopy(argument)
+            else -> JsirExpression.Unary(JsirUnaryOperation.ARRAY_COPY, JsirType.ANY, argument)
         }
     }
 

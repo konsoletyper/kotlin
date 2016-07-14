@@ -182,13 +182,8 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
             }
         }
     }
-    is JsirExpression.Negation -> {
-        writer.block("!") {
-            operand.prettyPrint(writer)
-        }
-    }
-    is JsirExpression.UnaryMinus -> {
-        writer.block("unary-minus") {
+    is JsirExpression.Unary -> {
+        writer.block(operation.getSymbol()) {
             operand.prettyPrint(writer)
         }
     }
@@ -224,24 +219,9 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
             elements.forEach { it.prettyPrint(writer) }
         }
     }
-    is JsirExpression.ArrayCopy -> {
-        writer.block("array-copy") {
-            array.prettyPrint(writer)
-        }
-    }
-    is JsirExpression.ArrayLength -> {
-        writer.block("length") {
-            operand.prettyPrint(writer)
-        }
-    }
     is JsirExpression.Concat -> {
         writer.block("concat") {
             parts.forEach { it.prettyPrint(writer) }
-        }
-    }
-    is JsirExpression.ToString -> {
-        writer.block("to-string") {
-            value.prettyPrint(writer)
         }
     }
     is JsirExpression.NewNullPointerExpression -> {
@@ -295,6 +275,15 @@ private fun JsirBinaryOperation.getSymbol() = when (this) {
     JsirBinaryOperation.REF_NE -> "!=="
     JsirBinaryOperation.ARRAY_GET -> "[]"
     JsirBinaryOperation.COMPARE -> "compare"
+    JsirBinaryOperation.EQUALS_METHOD -> "equals"
+}
+
+private fun JsirUnaryOperation.getSymbol() = when (this) {
+    JsirUnaryOperation.ARRAY_COPY -> "array-copy"
+    JsirUnaryOperation.MINUS -> "unary-minus"
+    JsirUnaryOperation.ARRAY_LENGTH -> "length"
+    JsirUnaryOperation.NEGATION -> "!"
+    JsirUnaryOperation.TO_STRING -> "to-string"
 }
 
 private class SourceWriter {

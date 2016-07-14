@@ -60,13 +60,9 @@ sealed class JsirExpression {
         val elements = mutableListOf(*elements)
     }
 
-    class ArrayCopy(var array: JsirExpression) : JsirExpression()
-
     class Concat(vararg parts: JsirExpression) : JsirExpression() {
         val parts = mutableListOf(*parts)
     }
-
-    class ToString(var value: JsirExpression) : JsirExpression()
 
     class FieldAccess(var receiver: JsirExpression?, var field: JsirField) : JsirExpression()
 
@@ -81,11 +77,7 @@ sealed class JsirExpression {
             var left: JsirExpression, var right: JsirExpression
     ) : JsirExpression()
 
-    class Negation(var operand: JsirExpression) : JsirExpression()
-
-    class UnaryMinus(var type: JsirType, var operand: JsirExpression) : JsirExpression()
-
-    class ArrayLength(var operand: JsirExpression) : JsirExpression()
+    class Unary(var operation: JsirUnaryOperation, var type: JsirType, var operand: JsirExpression) : JsirExpression()
 
     class NewNullPointerExpression : JsirExpression()
 }
@@ -113,7 +105,16 @@ enum class JsirBinaryOperation {
     GT,
     GOE,
     COMPARE,
-    ARRAY_GET
+    ARRAY_GET,
+    EQUALS_METHOD
+}
+
+enum class JsirUnaryOperation {
+    MINUS,
+    NEGATION,
+    ARRAY_LENGTH,
+    TO_STRING,
+    ARRAY_COPY
 }
 
 enum class JsirType {

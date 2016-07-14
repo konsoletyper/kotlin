@@ -67,7 +67,10 @@ fun JsirContext.append(expression: JsirExpression) {
 }
 
 fun JsirExpression.negate(): JsirExpression = when (this) {
-    is JsirExpression.Negation -> operand
+    is JsirExpression.Unary -> when (operation) {
+        JsirUnaryOperation.NEGATION -> operand
+        else -> negateDefault()
+    }
     is JsirExpression.True -> JsirExpression.False
     is JsirExpression.False -> JsirExpression.True
     is JsirExpression.Binary -> {
@@ -76,11 +79,13 @@ fun JsirExpression.negate(): JsirExpression = when (this) {
             JsirExpression.Binary(negatedOperation, type, left, right)
         }
         else {
-            JsirExpression.Negation(this)
+            negateDefault()
         }
     }
-    else -> JsirExpression.Negation(this)
+    else -> negateDefault()
 }
+
+private fun JsirExpression.negateDefault() = JsirExpression.Unary(JsirUnaryOperation.NEGATION, JsirType.ANY, this)
 
 fun JsirBinaryOperation.negate(): JsirBinaryOperation? = when (this) {
     JsirBinaryOperation.REF_EQ -> JsirBinaryOperation.REF_NE

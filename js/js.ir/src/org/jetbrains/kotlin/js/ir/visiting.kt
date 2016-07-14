@@ -80,17 +80,12 @@ fun <S, E> List<JsirStatement>.visit(visitor: JsirVisitor<S, E>) = forEach { it.
 
 fun <S, E> JsirExpression.visit(visitor: JsirVisitor<S, E>): E = visitor.accept(this, when (this) {
     is JsirExpression.ArrayOf -> ({ elements.visit(visitor) })
-    is JsirExpression.ArrayLength -> ({ operand.visit(visitor) })
-    is JsirExpression.ArrayCopy -> ({ array.visit(visitor) })
     is JsirExpression.Concat -> ({ parts.visit(visitor) })
     is JsirExpression.Binary -> ({
         left.visit(visitor)
         right.visit(visitor)
     })
-    is JsirExpression.Negation -> ({
-        operand.visit(visitor)
-    })
-    is JsirExpression.UnaryMinus -> ({
+    is JsirExpression.Unary -> ({
         operand.visit(visitor)
     })
     is JsirExpression.Conditional -> ({
@@ -112,7 +107,6 @@ fun <S, E> JsirExpression.visit(visitor: JsirVisitor<S, E>): E = visitor.accept(
     is JsirExpression.NewInstance -> ({
         arguments.visit(visitor)
     })
-    is JsirExpression.ToString -> ({ value.visit(visitor) })
 
     is JsirExpression.NewNullPointerExpression,
     is JsirExpression.VariableReference,
@@ -217,14 +211,6 @@ fun JsirExpression.replace(mapper: JsirMapper): JsirExpression = when (this) {
         right = right.replace(mapper)
         mapper.map(this)
     }
-    is JsirExpression.UnaryMinus -> {
-        operand = operand.replace(mapper)
-        mapper.map(this)
-    }
-    is JsirExpression.Negation -> {
-        operand = operand.replace(mapper)
-        mapper.map(this)
-    }
     is JsirExpression.Conditional -> {
         condition = condition.replace(mapper)
         thenExpression = thenExpression.replace(mapper)
@@ -235,20 +221,12 @@ fun JsirExpression.replace(mapper: JsirMapper): JsirExpression = when (this) {
         elements.replace(mapper)
         mapper.map(this)
     }
-    is JsirExpression.ArrayCopy -> {
-        array = array.replace(mapper)
-        mapper.map(this)
-    }
-    is JsirExpression.ArrayLength -> {
+    is JsirExpression.Unary -> {
         operand = operand.replace(mapper)
         mapper.map(this)
     }
     is JsirExpression.Concat -> {
         parts.replace(mapper)
-        mapper.map(this)
-    }
-    is JsirExpression.ToString -> {
-        value = value.replace(mapper)
         mapper.map(this)
     }
     is JsirExpression.Invocation -> {

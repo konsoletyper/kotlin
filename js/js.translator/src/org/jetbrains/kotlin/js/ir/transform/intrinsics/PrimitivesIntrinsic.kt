@@ -18,10 +18,7 @@ package org.jetbrains.kotlin.js.ir.transform.intrinsics
 
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.js.ir.JsirBinaryOperation
-import org.jetbrains.kotlin.js.ir.JsirExpression
-import org.jetbrains.kotlin.js.ir.JsirType
-import org.jetbrains.kotlin.js.ir.getPrimitiveType
+import org.jetbrains.kotlin.js.ir.*
 import org.jetbrains.kotlin.js.ir.generate.negate
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 
@@ -63,7 +60,7 @@ class PrimitivesIntrinsic : Intrinsic {
             "inc" -> JsirExpression.Binary(JsirBinaryOperation.ADD, type, receiver, JsirExpression.Constant(1))
             "dec" -> JsirExpression.Binary(JsirBinaryOperation.SUB, type, receiver, JsirExpression.Constant(1))
             "not" -> invocation.receiver!!.negate()
-            "unaryMinus" -> JsirExpression.UnaryMinus(type, receiver)
+            "unaryMinus" -> JsirExpression.Unary(JsirUnaryOperation.MINUS, type, receiver)
             else -> {
                 operation(functionName)?.let {
                     JsirExpression.Binary(it, type, receiver, invocation.arguments[0])

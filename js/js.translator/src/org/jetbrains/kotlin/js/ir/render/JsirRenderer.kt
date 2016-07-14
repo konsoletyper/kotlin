@@ -463,11 +463,29 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             is JsirExpression.Binary -> {
                 val result: JsExpression = when (operation) {
                     JsirBinaryOperation.ARRAY_GET -> JsArrayAccess(left.render(), right.render())
+                    JsirBinaryOperation.EQUALS_METHOD -> {
+                        JsInvocation(pureFqn("equals", pureFqn(kotlinName, null)), left.render(), right.render())
+                    }
                     JsirBinaryOperation.COMPARE -> {
                         val kotlinName = getInternalName(module.builtIns.builtInsModule)
                         JsInvocation(pureFqn("compare", pureFqn(kotlinName, null)), left.render(), right.render())
                     }
                     else -> JsBinaryOperation(operation.asJs(), left.render(), right.render())
+                }
+                result
+            }
+            is JsirExpression.Unary -> {
+                val operation = this.operation
+                val result: JsExpression = when (operation) {
+                    JsirUnaryOperation.NEGATION -> JsPrefixOperation(JsUnaryOperator.NOT, operand.render())
+                    JsirUnaryOperation.MINUS -> JsPrefixOperation(JsUnaryOperator.NEG, operand.render())
+                    JsirUnaryOperation.ARRAY_COPY -> JsInvocation(pureFqn("slice", operand.render()))
+                    JsirUnaryOperation.TO_STRING -> JsInvocation(JsNameRef("toString", operand.render()))
+                    JsirUnaryOperation.ARRAY_LENGTH -> {
+                        JsNameRef("length", operand.render()).apply {
+                            sideEffects = SideEffectKind.DEPENDS_ON_STATE
+                        }
+                    }
                 }
                 result
             }
@@ -482,12 +500,6 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             }
             is JsirExpression.Conditional -> {
                 JsConditional(condition.render(), thenExpression.render(), elseExpression.render())
-            }
-            is JsirExpression.Negation -> {
-                JsPrefixOperation(JsUnaryOperator.NOT, operand.render())
-            }
-            is JsirExpression.UnaryMinus -> {
-                JsPrefixOperation(JsUnaryOperator.NEG, operand.render())
             }
 
             is JsirExpression.Invocation -> {
@@ -557,17 +569,6 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             is JsirExpression.ArrayOf -> {
                 JsArrayLiteral(elements.render())
             }
-            is JsirExpression.ArrayCopy -> {
-                JsInvocation(pureFqn("slice", array.render()))
-            }
-            is JsirExpression.ArrayLength -> {
-                JsNameRef("length", operand.render()).apply {
-                    sideEffects = SideEffectKind.DEPENDS_ON_STATE
-                }
-            }
-            is JsirExpression.ToString -> {
-                JsInvocation(JsNameRef("toString", value.render()))
-            }
         }
 
         private fun JsirBinaryOperation.asJs() = when (this) {
@@ -594,6 +595,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             JsirBinaryOperation.REF_NE -> JsBinaryOperator.REF_NEQ
 
             JsirBinaryOperation.COMPARE,
+            JsirBinaryOperation.EQUALS_METHOD,
             JsirBinaryOperation.ARRAY_GET -> error("Can't express $this as binary operation in AST")
         }
 

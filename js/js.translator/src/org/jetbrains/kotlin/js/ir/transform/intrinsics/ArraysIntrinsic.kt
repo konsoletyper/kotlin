@@ -18,10 +18,7 @@ package org.jetbrains.kotlin.js.ir.transform.intrinsics
 
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyGetterDescriptor
-import org.jetbrains.kotlin.js.ir.JsirBinaryOperation
-import org.jetbrains.kotlin.js.ir.JsirExpression
-import org.jetbrains.kotlin.js.ir.JsirStatement
-import org.jetbrains.kotlin.js.ir.JsirType
+import org.jetbrains.kotlin.js.ir.*
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 
 class ArraysIntrinsic : Intrinsic {
@@ -54,7 +51,7 @@ class ArraysIntrinsic : Intrinsic {
 
     override fun apply(invocation: JsirExpression.Invocation) = when (functionOrPropertyName(invocation.function)) {
         "get" -> JsirExpression.Binary(JsirBinaryOperation.ARRAY_GET, JsirType.ANY, invocation.receiver!!, invocation.arguments[0])
-        "size" -> JsirExpression.ArrayLength(invocation.receiver!!)
+        "size" -> JsirExpression.Unary(JsirUnaryOperation.ARRAY_LENGTH, JsirType.ANY, invocation.receiver!!)
         else -> invocation
     }
 

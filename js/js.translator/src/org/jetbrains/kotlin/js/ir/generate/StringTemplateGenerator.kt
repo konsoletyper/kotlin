@@ -17,6 +17,8 @@
 package org.jetbrains.kotlin.js.ir.generate
 
 import org.jetbrains.kotlin.js.ir.JsirExpression
+import org.jetbrains.kotlin.js.ir.JsirType
+import org.jetbrains.kotlin.js.ir.JsirUnaryOperation
 import org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtStringTemplateEntryWithExpression
@@ -45,7 +47,7 @@ internal class StringTemplateGenerator(val context: JsirContext) : KtVisitorVoid
         val type = context.bindingContext.getType(expression)
         flush()
         mutableParts += if (type == null || type.isMarkedNullable) {
-            JsirExpression.ToString(translatedExpression)
+            JsirExpression.Unary(JsirUnaryOperation.TO_STRING, JsirType.ANY, translatedExpression)
         }
         else {
             translatedExpression
