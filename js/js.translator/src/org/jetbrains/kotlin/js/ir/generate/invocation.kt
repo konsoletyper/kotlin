@@ -29,18 +29,19 @@ import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall
-import org.jetbrains.kotlin.resolve.scopes.receivers.ExpressionReceiver
-import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitReceiver
-import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
+import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
+import org.jetbrains.kotlin.resolve.scopes.receivers.*
 
 internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, receiverFactory: (() -> JsirExpression)?): JsirExpression {
-    val translatedArguments = resolvedCall.valueArgumentsByIndex!!.map { argument ->
-        argument.arguments.map { generate(it.getArgumentExpression()!!) }
-    }
+    val translatedArguments = ({
+        resolvedCall.valueArgumentsByIndex!!.map { argument ->
+            argument.arguments.map { memoize(it.getArgumentExpression()!!) }
+        }
+    })
     return generateInvocation(resolvedCall, translatedArguments, receiverFactory)
 }
 
-internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, arguments: List<List<JsirExpression>>,
+internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, argumentsFactory: () -> List<List<JsirExpression>>,
                                             receiverFactory: (() -> JsirExpression)?): JsirExpression {
     val descriptor = resolvedCall.resultingDescriptor
     if (descriptor is VariableDescriptor && descriptor.containingDeclaration == function) {
@@ -48,7 +49,7 @@ internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, argum
     }
 
     val (receiverExpr, extensionExpr) = generateReceiver(resolvedCall, receiverFactory)
-    val args = extensionExpr?.let { listOf(it) }.orEmpty() + generateArguments(resolvedCall, arguments)
+    val args = extensionExpr?.let { listOf(it) }.orEmpty() + generateArguments(resolvedCall, argumentsFactory)
 
     val functionDescriptor = when (descriptor) {
         is VariableDescriptorWithAccessors -> {
@@ -60,10 +61,14 @@ internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, argum
     return JsirExpression.Invocation(receiverExpr, functionDescriptor, true, *args.toTypedArray())
 }
 
-private fun JsirContext.generateArguments(resolvedCall: ResolvedCall<*>, arguments: List<List<JsirExpression>>): List<JsirExpression> {
+private fun JsirContext.generateArguments(
+        resolvedCall: ResolvedCall<*>,
+        argumentsFactory: () -> List<List<JsirExpression>>
+): List<JsirExpression> {
     val function = resolvedCall.resultingDescriptor
     if (function?.valueParameters?.isEmpty() ?: false) return emptyList()
 
+    val arguments = argumentsFactory()
     return function.valueParameters.map { parameter ->
         val argument = arguments[parameter.index]
         if (parameter.varargElementType == null) {
@@ -119,11 +124,11 @@ internal fun JsirContext.generateArrayVariable(arrayPsi: KtArrayAccessExpression
 
     return object: VariableAccessor {
         override fun get(): JsirExpression {
-            return generateInvocation(getResolvedCall!!, indexes, arrayReceiverFactory)
+            return generateInvocation(getResolvedCall!!, { indexes }, arrayReceiverFactory)
         }
 
         override fun set(value: JsirExpression) {
-            append(generateInvocation(setResolvedCall!!, indexes + listOf(listOf(value)), arrayReceiverFactory))
+            append(generateInvocation(setResolvedCall!!, { indexes + listOf(listOf(value)) }, arrayReceiverFactory))
         }
     }
 }
@@ -139,22 +144,23 @@ internal fun JsirContext.generateReceiver(
         return Pair(generateInvocation(resolvedCall.variableCall, receiverFactory), null)
     }
 
-    return when {
-        dispatchReceiver != null -> Pair(generateMainReceiver(dispatchReceiver, receiverFactory),
-                                         extensionReceiver?.let { generateExtensionReceiver(it) })
-        extensionReceiver != null -> Pair(null, generateMainReceiver(extensionReceiver, receiverFactory))
-        else -> Pair(null, null)
+    return when (resolvedCall.explicitReceiverKind) {
+        ExplicitReceiverKind.NO_EXPLICIT_RECEIVER -> {
+            Pair(generateImplicitReceiver(dispatchReceiver), generateImplicitReceiver(extensionReceiver))
+        }
+        ExplicitReceiverKind.DISPATCH_RECEIVER -> Pair(receiverFactory!!(), generateImplicitReceiver(extensionReceiver))
+        ExplicitReceiverKind.EXTENSION_RECEIVER -> Pair(generateImplicitReceiver(dispatchReceiver), receiverFactory!!())
+        ExplicitReceiverKind.BOTH_RECEIVERS -> {
+            val receiver = memoize(receiverFactory!!())
+            Pair(receiver, receiver)
+        }
     }
 }
 
-private fun JsirContext.generateMainReceiver(receiver: ReceiverValue, receiverFactory: (() -> JsirExpression)?) = when (receiver) {
-    is ExpressionReceiver -> memoize(receiverFactory?.let { it() } ?: memoize(receiver.expression))
-    else -> memoize(receiverFactory!!())
-}
-
-private fun JsirContext.generateExtensionReceiver(receiver: ReceiverValue) = when (receiver) {
-    is ImplicitReceiver -> memoize(generateThis(receiver.declarationDescriptor as ClassDescriptor))
-    else -> JsirExpression.Null
+private fun JsirContext.generateImplicitReceiver(receiver: ReceiverValue?) = when (receiver) {
+    is ExpressionReceiver -> memoize(receiver.expression)
+    is ThisClassReceiver -> generateThis(receiver.classDescriptor)
+    else -> null
 }
 
 internal fun JsirContext.generateThis(descriptor: ClassDescriptor): JsirExpression {

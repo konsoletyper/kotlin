@@ -63,16 +63,17 @@ internal fun JsirContext.generateUnary(expression: KtUnaryExpression): JsirExpre
 private fun JsirContext.generateIncrement(expression: KtUnaryExpression): JsirExpression {
     val resolvedCall = expression.getFunctionResolvedCallWithAssert(bindingContext)
     val variable = generateVariable(expression.baseExpression!!)
-    val receiverFactory = defaultReceiverFactory(expression.baseExpression!!)
+    val receiverFactory = { variable.get() }
 
     return if (expression is KtPostfixExpression) {
         val temporary = JsirVariable().makeReference()
         assign(temporary, variable.get())
-        variable.set(generateInvocation(resolvedCall, receiverFactory))
+        variable.set(generateInvocation(resolvedCall, { listOf(listOf(temporary)) }, receiverFactory))
         temporary
     }
     else {
-        variable.set(generateInvocation(resolvedCall, receiverFactory))
-        variable.get()
+        val temporary = memoize(generateInvocation(resolvedCall, { listOf(listOf(variable.get())) }, receiverFactory))
+        variable.set(temporary)
+        temporary
     }
 }

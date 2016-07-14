@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.js.ir.transform.intrinsics
 
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.descriptors.PropertyGetterDescriptor
 import org.jetbrains.kotlin.js.ir.JsirBinaryOperation
 import org.jetbrains.kotlin.js.ir.JsirExpression
 import org.jetbrains.kotlin.js.ir.JsirStatement
@@ -29,7 +30,7 @@ class ArraysIntrinsic : Intrinsic {
         val className = cls.fqNameSafe.asString()
         if (!isApplicableToClass(className)) return false
 
-        val functionName = descriptor.name.asString()
+        val functionName = functionOrPropertyName(descriptor)
         return if (asStatement) functionName == "set" else isApplicableToFunction(functionName)
     }
 
@@ -51,7 +52,7 @@ class ArraysIntrinsic : Intrinsic {
         else -> false
     }
 
-    override fun apply(invocation: JsirExpression.Invocation) = when (invocation.function.name.asString()) {
+    override fun apply(invocation: JsirExpression.Invocation) = when (functionOrPropertyName(invocation.function)) {
         "get" -> JsirExpression.Binary(JsirBinaryOperation.ARRAY_GET, JsirType.ANY, invocation.receiver!!, invocation.arguments[0])
         "size" -> JsirExpression.ArrayLength(invocation.receiver!!)
         else -> invocation
@@ -63,5 +64,10 @@ class ArraysIntrinsic : Intrinsic {
             JsirStatement.Assignment(lhs, invocation.arguments[1])
         }
         else -> null
+    }
+
+    private fun functionOrPropertyName(descriptor: FunctionDescriptor) = when (descriptor) {
+        is PropertyGetterDescriptor -> descriptor.correspondingProperty.name.asString()
+        else -> descriptor.name.asString()
     }
 }

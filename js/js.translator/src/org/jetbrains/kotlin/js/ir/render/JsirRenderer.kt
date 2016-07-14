@@ -391,7 +391,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                     val jsCatchVar = it.catchVariable.suggestedName ?: "\$tmp"
                     val oldScope = scope
                     scope = JsCatchScope(scope, "catch")
-                    val jsCatch = JsCatch(scope, jsCatchVar)
+                    val jsCatch = JsCatch(scope, jsCatchVar, JsBlock())
                     variableNames[it.catchVariable] = jsCatch.parameter.name
 
                     jsCatch.body.statements += body.render()

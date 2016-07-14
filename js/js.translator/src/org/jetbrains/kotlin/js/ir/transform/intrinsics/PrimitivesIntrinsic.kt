@@ -49,21 +49,24 @@ class PrimitivesIntrinsic : Intrinsic {
         "dec",
         "equals",
         "not",
-        "compareTo" -> true
+        "compareTo",
+        "unaryMinus" -> true
         else -> false
     }
 
     override fun apply(invocation: JsirExpression.Invocation): JsirExpression {
         val functionName = invocation.function.name.asString()
         val type = getType(getClass(invocation.function).fqNameSafe.asString()) ?: return invocation
+        val receiver = invocation.receiver!!
 
         return when (functionName) {
-            "inc" -> JsirExpression.Binary(JsirBinaryOperation.ADD, type, invocation.receiver!!, JsirExpression.Constant(1))
-            "dec" -> JsirExpression.Binary(JsirBinaryOperation.SUB, type, invocation.receiver!!, JsirExpression.Constant(1))
+            "inc" -> JsirExpression.Binary(JsirBinaryOperation.ADD, type, receiver, JsirExpression.Constant(1))
+            "dec" -> JsirExpression.Binary(JsirBinaryOperation.SUB, type, receiver, JsirExpression.Constant(1))
             "not" -> invocation.receiver!!.negate()
+            "unaryMinus" -> JsirExpression.UnaryMinus(type, receiver)
             else -> {
                 operation(functionName)?.let {
-                    JsirExpression.Binary(it, type, invocation.receiver!!, invocation.arguments[0])
+                    JsirExpression.Binary(it, type, receiver, invocation.arguments[0])
                 } ?: invocation
             }
         }

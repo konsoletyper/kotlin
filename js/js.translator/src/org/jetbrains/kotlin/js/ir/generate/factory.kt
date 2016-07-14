@@ -35,7 +35,7 @@ fun JsirContext.memoize(expression: JsirExpression) = when (expression) {
     }
 }
 
-fun JsirContext.memoize(expression: KtExpression) = memoize(generate(expression))
+fun JsirContext.memoize(expression: KtExpression) = withSource(expression) { memoize(generate(expression)) }
 
 fun JsirExpression.nullCheck() = when (this) {
     is JsirExpression.Null -> JsirExpression.True

@@ -216,6 +216,10 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         return context.generateInvocation(resolvedCall, context.defaultReceiverFactory(qualifier))
     }
 
+    override fun visitBinaryWithTypeRHSExpression(expression: KtBinaryExpressionWithTypeRHS, data: JsirContext?): JsirExpression {
+        return context.generate(expression.left)
+    }
+
     override fun visitProperty(propertyPsi: KtProperty, data: JsirContext): JsirExpression {
         val descriptor = context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, propertyPsi]
         if (context.declaration is FunctionDescriptor) {

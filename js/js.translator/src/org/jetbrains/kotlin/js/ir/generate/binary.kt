@@ -17,16 +17,12 @@
 package org.jetbrains.kotlin.js.ir.generate
 
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.js.ir.JsirBinaryOperation
-import org.jetbrains.kotlin.js.ir.JsirExpression
-import org.jetbrains.kotlin.js.ir.getPrimitiveType
-import org.jetbrains.kotlin.js.ir.receiverClass
+import org.jetbrains.kotlin.js.ir.*
 import org.jetbrains.kotlin.js.translate.utils.BindingUtils
 import org.jetbrains.kotlin.js.translate.utils.JsDescriptorUtils
 import org.jetbrains.kotlin.js.translate.utils.PsiUtils
 import org.jetbrains.kotlin.lexer.KtToken
 import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.psi.KtArrayAccessExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
@@ -45,6 +41,8 @@ internal fun JsirContext.generateBinary(expression: KtBinaryExpression): JsirExp
         }
         operationDescriptor != null && JsDescriptorUtils.isCompareTo(operationDescriptor) -> generateCompareTo(expression)
         operation == KtTokens.EXCLEQ -> generateInvocation(expression.getResolvedCall(bindingContext)!!, receiverFactory).negate()
+        operation == KtTokens.ANDAND -> generateLogical(expression, false)
+        operation == KtTokens.OROR -> generateLogical(expression, true)
         else -> generateInvocation(expression.getResolvedCall(bindingContext)!!, receiverFactory)
     }
 }
@@ -93,6 +91,9 @@ private fun JsirContext.generateCompareTo(expression: KtBinaryExpression): JsirE
     val call = expression.getResolvedCall(bindingContext)!!
     val function = call.resultingDescriptor as FunctionDescriptor
 
+    val left = memoize(expression.left!!)
+    val right = generate(expression.right!!)
+
     val operation = when (psiOperation) {
         KtTokens.EQEQ,
         KtTokens.EQEQEQ -> JsirBinaryOperation.EQ
@@ -105,8 +106,25 @@ private fun JsirContext.generateCompareTo(expression: KtBinaryExpression): JsirE
         else -> throw IllegalArgumentException("Unexpected comparison token: ${psiOperation}")
     }
 
-    val invocation = generateInvocation(call, defaultReceiverFactory(expression.left))
+    val invocation = generateInvocation(call, { listOf(listOf(right)) }, { left })
     val type = getPrimitiveType(function.receiverClass!!.fqNameSafe.asString())
 
     return JsirExpression.Binary(operation, type, invocation, JsirExpression.Constant(0))
+}
+
+private fun JsirContext.generateLogical(expression: KtBinaryExpression, invert: Boolean): JsirExpression {
+    val left = expression.left!!
+    val right = expression.right!!
+
+    val temporary = JsirVariable().makeReference()
+    assign(temporary, generate(left))
+    val condition = JsirStatement.If(if (invert) temporary.negate() else temporary)
+    withSource(expression) {
+        nestedBlock(condition.thenBody) {
+            assign(temporary, generate(right))
+        }
+    }
+    append(condition)
+
+    return temporary
 }
