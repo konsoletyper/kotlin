@@ -19,7 +19,7 @@ package org.jetbrains.kotlin.js.ir
 interface JsirVisitor<S, E> {
     fun accept(statement: JsirStatement, inner: () -> Unit): S
 
-    fun accept(statement: JsirExpression, inner: () -> Unit): E
+    fun accept(expression: JsirExpression, inner: () -> Unit): E
 }
 
 interface JsirMapper {
@@ -117,6 +117,7 @@ fun <S, E> JsirExpression.visit(visitor: JsirVisitor<S, E>): E = visitor.accept(
 
     is JsirExpression.NewNullPointerExpression,
     is JsirExpression.VariableReference,
+    is JsirExpression.FunctionReference,
     is JsirExpression.Constant,
     is JsirExpression.This,
     is JsirExpression.Null,
@@ -212,6 +213,7 @@ fun JsirExpression.replace(mapper: JsirMapper): JsirExpression = when (this) {
     is JsirExpression.Undefined,
     is JsirExpression.This,
     is JsirExpression.NewNullPointerExpression,
+    is JsirExpression.FunctionReference,
     is JsirExpression.VariableReference -> mapper.map(this)
     is JsirExpression.Binary -> {
         left = left.replace(mapper)

@@ -44,6 +44,7 @@ fun JsirExpression.nullCheck() = when (this) {
     is JsirExpression.True,
     is JsirExpression.False,
     is JsirExpression.Undefined,
+    is JsirExpression.FunctionReference,
     is JsirExpression.Constant -> JsirExpression.False
 
     else -> JsirExpression.Binary(JsirBinaryOperation.REF_EQ, JsirType.ANY, this, JsirExpression.Null)
@@ -61,6 +62,7 @@ fun JsirContext.append(expression: JsirExpression) {
         is JsirExpression.False,
         is JsirExpression.Constant,
         is JsirExpression.This,
+        is JsirExpression.FunctionReference,
         is JsirExpression.VariableReference -> {}
         else -> append(JsirStatement.Assignment(null, expression))
     }

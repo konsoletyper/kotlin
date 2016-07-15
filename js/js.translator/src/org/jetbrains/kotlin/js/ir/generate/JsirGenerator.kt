@@ -27,6 +27,7 @@ import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.BindingContextUtils
 import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
+import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall
 import org.jetbrains.kotlin.resolve.constants.NullValue
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator
 import org.jetbrains.kotlin.types.TypeUtils
@@ -210,6 +211,9 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         val qualifier = if (callee is KtDotQualifiedExpression) {
             callee.receiverExpression
         }
+        else if (resolvedCall is VariableAsFunctionResolvedCall) {
+            callee
+        }
         else {
             null
         }
@@ -288,7 +292,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             else {
                 val parameter = JsirVariable(accessor.correspondingVariable.name.asString())
                 function.parameters += parameter
-                function.body += JsirStatement.Assignment(access, JsirExpression.VariableReference(parameter))
+                function.body += JsirStatement.Assignment(access, parameter.makeReference())
             }
             context.pool.addFunction(function)
         }
@@ -402,6 +406,29 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         return context.generateInvocation(resolvedCall, null)
     }
 
+    override fun visitThisExpression(expression: KtThisExpression, data: JsirContext?): JsirExpression {
+        val resolvedCall = expression.getResolvedCall(context.bindingContext) ?: return JsirExpression.This
+
+        val descriptor = (resolvedCall.resultingDescriptor as ReceiverParameterDescriptor).containingDeclaration
+        if (descriptor is ClassDescriptor) {
+            var result: JsirExpression = JsirExpression.This
+            var currentClass = context.classDescriptor!!
+            while (currentClass != descriptor) {
+                result = JsirExpression.FieldAccess(result, JsirField.OuterClass(currentClass))
+                currentClass = currentClass.containingDeclaration as ClassDescriptor
+            }
+            return result
+        }
+        else {
+            return super.visitThisExpression(expression, data)
+        }
+    }
+
+    override fun visitThrowExpression(expression: KtThrowExpression, data: JsirContext?): JsirExpression {
+        context.append(JsirStatement.Throw(context.memoize(expression.thrownExpression!!)))
+        return JsirExpression.Undefined
+    }
+
     override fun visitQualifiedExpression(expression: KtQualifiedExpression, data: JsirContext?): JsirExpression {
         val selector = expression.selectorExpression
         val receiverFactory = context.defaultReceiverFactory(expression.receiverExpression)
@@ -421,6 +448,10 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
 
     override fun visitPropertyAccessor(accessor: KtPropertyAccessor, data: JsirContext?): JsirExpression {
         return generateFunctionDeclaration(accessor)
+    }
+
+    override fun visitLambdaExpression(expression: KtLambdaExpression, data: JsirContext?): JsirExpression {
+        return generateFunctionDeclaration(expression.functionLiteral)
     }
 
     private fun generateFunctionDeclaration(functionPsi: KtDeclarationWithBody): JsirExpression {
@@ -456,7 +487,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             context.pool.addFunction(function)
         }
 
-        return JsirExpression.Undefined
+        return JsirExpression.FunctionReference(descriptor)
     }
 }
 

@@ -108,7 +108,7 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
             }
             result
         }
-        return LocalVariableAccessor(localVar)
+        return LocalVariableAccessor(localVar, container)
     }
 
     fun nestedBlock(body: MutableList<JsirStatement>, action: () -> Unit) {
@@ -202,11 +202,13 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         throw JsirGenerationException(expression, e)
     }
 
-    inner class LocalVariableAccessor(val localVariable: JsirVariable) : VariableAccessor {
-        override fun get() = localVariable.makeReference()
+    inner class LocalVariableAccessor(val localVariable: JsirVariable, val declaringFunction: FunctionDescriptor) : VariableAccessor {
+        override fun get() = makeReference()
 
         override fun set(value: JsirExpression) {
-            assign(localVariable.makeReference(), value)
+            assign(makeReference(), value)
         }
+
+        private fun makeReference() = JsirExpression.VariableReference(localVariable, declaringFunction != function)
     }
 }

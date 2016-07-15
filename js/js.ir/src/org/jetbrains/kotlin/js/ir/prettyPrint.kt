@@ -255,6 +255,7 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
     is JsirExpression.True -> writer.constant("true")
     is JsirExpression.False -> writer.constant("false")
     is JsirExpression.VariableReference -> writer.constant("(var ${writer.getVariable(variable)})")
+    is JsirExpression.FunctionReference -> writer.constant("(function ${function.name.asString()})")
 }
 
 private fun JsirField.prettyPrint() = when (this) {

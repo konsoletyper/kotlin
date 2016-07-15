@@ -38,7 +38,9 @@ sealed class JsirExpression {
 
     object Undefined : JsirExpression()
 
-    class VariableReference(var variable: JsirVariable) : JsirExpression()
+    class VariableReference(var variable: JsirVariable, val free: Boolean) : JsirExpression()
+
+    class FunctionReference(var function: FunctionDescriptor) : JsirExpression()
 
     class Invocation(
             var receiver: JsirExpression?,
@@ -143,4 +145,4 @@ sealed class JsirField {
 
 class JsirVariable(val suggestedName: String? = null)
 
-fun JsirVariable.makeReference() = JsirExpression.VariableReference(this)
+fun JsirVariable.makeReference() = JsirExpression.VariableReference(this, false)

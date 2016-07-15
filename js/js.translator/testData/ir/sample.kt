@@ -1,4 +1,9 @@
+package foo
+
+class A
+
 fun box(): String {
-    println("Hello, world!")
+    println(A())
+
     return "OK"
 }

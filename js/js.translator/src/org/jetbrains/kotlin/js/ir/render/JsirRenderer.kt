@@ -14,22 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.jetbrains.kotlin.js.ir.render
 
 import com.google.dart.compiler.backend.js.ast.*
@@ -38,6 +22,7 @@ import com.google.dart.compiler.backend.js.ast.metadata.sideEffects
 import com.google.dart.compiler.backend.js.ast.metadata.synthetic
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.ir.*
+import org.jetbrains.kotlin.js.ir.analyze.collectFreeVariables
 import org.jetbrains.kotlin.js.translate.context.Namer
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils.pureFqn
@@ -93,6 +78,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     val rootPackage = Package()
     val module = pool.module
     val moduleNames = mutableListOf<String>()
+    val freeVariablesByFunction = pool.functions.values.asSequence().map { it to it.collectFreeVariables() }.toMap()
 
     fun render(): JsFunction {
         val initRenderer = StatementRenderer(wrapperFunction)
@@ -102,7 +88,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         }
 
         for (function in pool.functions.values) {
-            wrapperFunction.body.statements += FunctionRenderer(function).render().makeStmt()
+            wrapperFunction.body.statements += renderFunction(function).makeStmt()
         }
 
         wrapperFunction.body.statements.addAll(0, importsSection)
@@ -120,6 +106,50 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
 
         return wrapperFunction
     }
+
+    fun renderFunction(function: JsirFunction): JsFunction {
+        val freeVariables = getFreeVariables(function)
+
+        val result = if (freeVariables.isEmpty()) {
+            renderRawFunction(function, wrapperFunction.scope, emptyMap())
+        }
+        else {
+            val constructor = JsFunction(wrapperFunction.scope, JsBlock(), "closure constructor: ${function.declaration}")
+            val freeVariableNames = mutableMapOf<JsirVariable, JsName>()
+            for (freeVariable in freeVariables) {
+                val suggestedName = freeVariable.suggestedName ?: "closure\$tmp"
+                val name = constructor.scope.declareFreshName(suggestedName)
+                freeVariableNames[freeVariable] = name
+                constructor.parameters += JsParameter(name)
+            }
+
+            constructor.body.statements += JsReturn(renderRawFunction(function, constructor.scope, freeVariableNames))
+            constructor
+        }
+        result.name = getInternalName(function.declaration)
+
+        return result
+    }
+
+    fun renderRawFunction(function: JsirFunction, scope: JsScope, freeVariables: Map<JsirVariable, JsName>): JsFunction {
+        val jsFunction = JsFunction(scope, JsBlock(), function.declaration.toString())
+        val renderer = StatementRenderer(jsFunction)
+        renderer.variableNames += freeVariables
+
+        jsFunction.parameters += function.parameters.map { JsParameter(renderer.getJsNameFor(it)) }
+        jsFunction.body.statements += function.body.flatMap { renderer.renderStatement(it) }
+
+        val declaredVariables = renderer.variableNames.keys - function.parameters - freeVariables.keys
+        if (declaredVariables.isNotEmpty()) {
+            val declarations = JsVars(*declaredVariables.map { JsVars.JsVar(renderer.variableNames[it]!!) }.toTypedArray())
+                    .apply { synthetic = true }
+            jsFunction.body.statements.add(0, declarations)
+        }
+
+        return jsFunction
+    }
+
+    fun getFreeVariables(function: JsirFunction) = freeVariablesByFunction[function].orEmpty()
 
     fun exportTopLevel() {
         for (function in pool.functions.keys.filter { it !is VariableAccessorDescriptor && it.isEffectivelyPublicApi }) {
@@ -265,25 +295,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         }
     }
 
-    inner class FunctionRenderer(val function: JsirFunction)
-            : StatementRenderer(JsFunction(wrapperFunction.scope, JsBlock(), function.declaration.toString())) {
-        fun render(): JsFunction {
-            jsFunction.name = getInternalName(function.declaration)
-            jsFunction.parameters += function.parameters.map { JsParameter(it.getJsName()) }
-            jsFunction.body.statements += function.body.render()
-
-            val declaredVariables = variableNames.keys - function.parameters
-            if (declaredVariables.isNotEmpty()) {
-                val declarations = JsVars(*declaredVariables.map { JsVars.JsVar(variableNames[it]!!) }.toTypedArray())
-                        .apply { synthetic = true }
-                jsFunction.body.statements.add(0, declarations)
-            }
-
-            return jsFunction
-        }
-    }
-
-    inner open class StatementRenderer(val jsFunction: JsFunction) : JsirRenderingContext {
+    inner open class StatementRenderer(jsFunction: JsFunction) : JsirRenderingContext {
         val labelNames = mutableMapOf<JsirLabeled, JsName>()
         val variableNames = mutableMapOf<JsirVariable, JsName>()
         override var scope: JsScope = jsFunction.scope
@@ -428,6 +440,8 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             }
         }
 
+        fun getJsNameFor(variable: JsirVariable) = variable.getJsName()
+
         fun JsirLabeled.getJsName(): JsName = labelNames.getOrPut(this) {
             scope.declareFreshName(suggestedLabelName ?: "\$label")
         }
@@ -536,6 +550,18 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                         }
                     }
                 }
+            }
+            is JsirExpression.FunctionReference -> {
+                val freeVariables = getFreeVariables(pool.functions[this.function]!!)
+                val reference = pureFqn(getInternalName(function), null)
+                val result: JsExpression = if (freeVariables.isEmpty()) {
+                    reference
+                }
+                else {
+                    val closure = freeVariables.map { it.getJsName().makeRef() }
+                    JsInvocation(reference, closure)
+                }
+                result
             }
             is JsirExpression.Application -> {
                 JsInvocation(function.render(), *arguments.render().toTypedArray())

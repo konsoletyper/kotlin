@@ -44,7 +44,7 @@ internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, recei
 internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, argumentsFactory: () -> List<List<JsirExpression>>,
                                             receiverFactory: (() -> JsirExpression)?): JsirExpression {
     val descriptor = resolvedCall.resultingDescriptor
-    if (descriptor is VariableDescriptor && descriptor.containingDeclaration == function) {
+    if (descriptor is VariableDescriptor && descriptor.containingDeclaration is FunctionDescriptor) {
         return getVariable(descriptor).get()
     }
 
