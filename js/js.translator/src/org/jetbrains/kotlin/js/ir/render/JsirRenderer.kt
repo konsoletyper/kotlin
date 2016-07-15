@@ -84,7 +84,6 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         val initRenderer = StatementRenderer(wrapperFunction)
         for (property in pool.properties.values) {
             wrapperFunction.body.statements += JsVars(JsVars.JsVar(getInternalName(property.declaration)))
-            wrapperFunction.body.statements += property.initializerBody.flatMap { initRenderer.renderStatement(it) }
         }
 
         for (cls in pool.classes.values) {
@@ -95,6 +94,10 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             val jsFunction = renderFunction(function)
             jsFunction.name = getInternalName(function.declaration)
             wrapperFunction.body.statements += jsFunction.makeStmt()
+        }
+
+        for (statement in pool.initializerBody) {
+            wrapperFunction.body.statements += initRenderer.renderStatement(statement)
         }
 
         wrapperFunction.body.statements.addAll(0, importsSection)
@@ -109,17 +112,32 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         wrapperFunction.body.statements += defineModule.makeStmt()
 
         wrapperFunction.body.statements += JsReturn(topLevel.makeRef())
-
         return wrapperFunction
     }
 
     fun renderClass(cls: JsirClass) {
         val constructorName = getInternalName(cls.declaration)
-        val constructor = JsFunction(wrapperFunction.scope, JsBlock(), cls.declaration.toString())
-        constructor.name = constructorName
-        wrapperFunction.body.statements += constructor.makeStmt()
+        val jsConstructor = JsFunction(wrapperFunction.scope, JsBlock(), cls.declaration.toString())
+        jsConstructor.name = constructorName
+        wrapperFunction.body.statements += jsConstructor.makeStmt()
+        val renderer = StatementRenderer(jsConstructor)
+
+        val primaryConstructorDescriptor = cls.functions.values.asSequence()
+                .map { it.declaration }
+                .firstOrNull { it is ConstructorDescriptor && it.isPrimary }
+        if (primaryConstructorDescriptor != null) {
+            val primaryConstructor = cls.functions[primaryConstructorDescriptor]!!
+            renderRawFunction(primaryConstructor, wrapperFunction.scope, emptyMap(), renderer)
+        }
+
+        for (initStatement in cls.initializerBody) {
+            jsConstructor.body.statements += renderer.renderStatement(initStatement)
+        }
 
         for (function in cls.functions.values) {
+            val declaration = function.declaration
+            if (declaration is ConstructorDescriptor && declaration.isPrimary) continue
+
             val prototype = JsNameRef("prototype", constructorName.makeRef())
             val lhs = JsNameRef(getSuggestedName(function.declaration), prototype)
             wrapperFunction.body.statements += JsAstUtils.assignment(lhs, renderFunction(function)).makeStmt()
@@ -149,9 +167,11 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         return result
     }
 
-    fun renderRawFunction(function: JsirFunction, scope: JsScope, freeVariables: Map<JsirVariable, JsName>): JsFunction {
-        val jsFunction = JsFunction(scope, JsBlock(), function.declaration.toString())
-        val renderer = StatementRenderer(jsFunction)
+    fun renderRawFunction(
+            function: JsirFunction, scope: JsScope, freeVariables: Map<JsirVariable, JsName>,
+            renderer: StatementRenderer = StatementRenderer(JsFunction(scope, JsBlock(), function.declaration.toString()))
+    ): JsFunction {
+        val jsFunction = renderer.jsFunction
         renderer.variableNames += freeVariables
 
         jsFunction.parameters += function.parameters.map { JsParameter(renderer.getJsNameFor(it)) }
@@ -319,7 +339,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         }
     }
 
-    inner open class StatementRenderer(jsFunction: JsFunction) : JsirRenderingContext {
+    inner open class StatementRenderer(val jsFunction: JsFunction) : JsirRenderingContext {
         val labelNames = mutableMapOf<JsirLabeled, JsName>()
         val variableNames = mutableMapOf<JsirVariable, JsName>()
         override var scope: JsScope = jsFunction.scope
@@ -384,7 +404,11 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                     statements + JsReturn(jsValue)
                 }
                 else {
-                    listOf(JsReturn(value?.render()))
+                    val returnValue = when (value) {
+                        is JsirExpression.Undefined -> null
+                        else -> value?.render()
+                    }
+                    listOf(JsReturn(returnValue))
                 }
             }
             is JsirStatement.Throw -> {
@@ -558,8 +582,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                         val jsReceiver = receiver?.render()
                         val jsArgs = arguments.map { it.render() }.toTypedArray()
                         if (jsReceiver != null) {
-                            val overriddenFunction = generateSequence(function.original) { it.overriddenDescriptors.firstOrNull() }.last()
-                            val functionName = ManglingUtils.getSuggestedName(overriddenFunction.original)
+                            val functionName = getNameForMemberFunction(function)
                             if (virtual) {
                                 JsInvocation(pureFqn(functionName, jsReceiver), *jsArgs)
                             }
@@ -658,6 +681,15 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             JsirBinaryOperation.COMPARE,
             JsirBinaryOperation.EQUALS_METHOD,
             JsirBinaryOperation.ARRAY_GET -> error("Can't express $this as binary operation in AST")
+        }
+
+        private fun getNameForMemberFunction(function: FunctionDescriptor): String {
+            val overriddenFunction = generateSequence(function.original) { it.overriddenDescriptors.firstOrNull() }.last().original
+            return when (overriddenFunction) {
+                is PropertyGetterDescriptor -> "get_" + ManglingUtils.getSuggestedName(overriddenFunction.correspondingProperty)
+                is PropertySetterDescriptor -> "set_" + ManglingUtils.getSuggestedName(overriddenFunction.correspondingProperty)
+                else -> ManglingUtils.getSuggestedName(overriddenFunction)
+            }
         }
 
         @JvmName("renderStatements")

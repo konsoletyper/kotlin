@@ -111,7 +111,17 @@ internal fun JsirContext.generateVariable(resolvedCall: ResolvedCall<*>, receive
         override fun get() = JsirExpression.Invocation(receiverExpr, descriptor.getter!!, true, *extensionArgs.toTypedArray())
 
         override fun set(value: JsirExpression) {
-            append(JsirExpression.Invocation(receiverExpr, descriptor.setter!!, true, *(extensionArgs + value).toTypedArray()))
+            if (requiresBackingFieldAccess()) {
+                assign(JsirExpression.FieldAccess(receiverExpr, JsirField.Backing(descriptor)), value)
+            }
+            else {
+                append(JsirExpression.Invocation(receiverExpr, descriptor.setter!!, true, *(extensionArgs + value).toTypedArray()))
+            }
+        }
+
+        private fun requiresBackingFieldAccess(): Boolean {
+            return (declaration is ConstructorDescriptor || declaration is ClassDescriptor) &&
+                   classDescriptor == descriptor.containingDeclaration
         }
     }
 }

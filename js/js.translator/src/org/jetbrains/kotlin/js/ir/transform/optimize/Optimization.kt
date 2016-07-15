@@ -17,7 +17,9 @@
 package org.jetbrains.kotlin.js.ir.transform.optimize
 
 import org.jetbrains.kotlin.js.ir.JsirFunction
+import org.jetbrains.kotlin.js.ir.JsirStatement
+import org.jetbrains.kotlin.js.ir.JsirVariable
 
 interface Optimization {
-    fun apply(function: JsirFunction): List<Optimization>
+    fun apply(parameters: List<JsirVariable>, body: MutableList<JsirStatement>): List<Optimization>
 }

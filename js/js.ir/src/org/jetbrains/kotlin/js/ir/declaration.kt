@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.descriptors.VariableDescriptorWithAccessors
 interface JsirContainer {
     val functions: MutableMap<FunctionDescriptor, JsirFunction>
     val properties: MutableMap<VariableDescriptorWithAccessors, JsirProperty>
+    val initializerBody: MutableList<JsirStatement>
 }
 
 class JsirFunction(val declaration: FunctionDescriptor) {
@@ -31,12 +32,10 @@ class JsirFunction(val declaration: FunctionDescriptor) {
     val body = mutableListOf<JsirStatement>()
 }
 
-class JsirProperty(val declaration: VariableDescriptorWithAccessors) {
-    val initializerBody = mutableListOf<JsirStatement>()
-}
+class JsirProperty(val declaration: VariableDescriptorWithAccessors)
 
 class JsirClass(val declaration: ClassDescriptor) : JsirContainer {
-    val initializer = mutableListOf<JsirStatement>()
+    override val initializerBody = mutableListOf<JsirStatement>()
 
     override val functions = mutableMapOf<FunctionDescriptor, JsirFunction>()
 
@@ -49,4 +48,6 @@ class JsirPool(val module: ModuleDescriptor) : JsirContainer {
     override val properties = mutableMapOf<VariableDescriptorWithAccessors, JsirProperty>()
 
     val classes = mutableMapOf<ClassDescriptor, JsirClass>()
+
+    override val initializerBody = mutableListOf<JsirStatement>()
 }

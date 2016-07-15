@@ -29,8 +29,8 @@ class IntrinsicsTransformation : Transformation {
     )
     private val intrinsicCache = mutableMapOf<Pair<FunctionDescriptor, Boolean>, Intrinsic?>()
 
-    override fun apply(function: JsirFunction) {
-        function.body.replace(object : JsirMapper {
+    override fun apply(parameters: List<JsirVariable>, body: MutableList<JsirStatement>) {
+        body.replace(object : JsirMapper {
             override fun map(statement: JsirStatement, canChangeType: Boolean) = when (statement) {
                 is JsirStatement.Assignment -> {
                     val right = statement.right

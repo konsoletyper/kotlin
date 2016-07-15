@@ -16,20 +16,21 @@
 
 package org.jetbrains.kotlin.js.ir.transform.optimize
 
-import org.jetbrains.kotlin.js.ir.JsirFunction
+import org.jetbrains.kotlin.js.ir.JsirStatement
+import org.jetbrains.kotlin.js.ir.JsirVariable
 import org.jetbrains.kotlin.js.ir.transform.Transformation
 
 class OptimizingTransformation : Transformation {
     private val optimizations = listOf(CompareToElimination())
 
-    override fun apply(function: JsirFunction) {
+    override fun apply(parameters: List<JsirVariable>, body: MutableList<JsirStatement>) {
         val currentOptimizations = mutableSetOf<Optimization>()
         currentOptimizations += optimizations
 
         while (currentOptimizations.isNotEmpty()) {
             val optimization = currentOptimizations.first()
             currentOptimizations -= optimization
-            val newOptimizations = optimization.apply(function)
+            val newOptimizations = optimization.apply(parameters, body)
             currentOptimizations -= newOptimizations
             currentOptimizations += newOptimizations
         }

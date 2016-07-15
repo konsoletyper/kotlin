@@ -206,6 +206,8 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         val cls = JsirClass(descriptor)
         context.pool.classes[cls.declaration] = cls
         context.nestedClass(cls) {
+            psi.getPrimaryConstructor()?.let { it.accept(this, data) }
+
             val bodyPsi = psi.getBody()
             if (bodyPsi != null) {
                 for (declaration in bodyPsi.declarations) {
@@ -268,7 +270,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             val propertyDeclaration = JsirProperty(variable)
             val initializer = propertyPsi.initializer
             if (initializer != null) {
-                context.nestedBlock(propertyDeclaration.initializerBody) {
+                context.nestedBlock(context.container.initializerBody) {
                     val receiver = if (variable.containingDeclaration is ClassDescriptor) JsirExpression.This else null
                     val access = JsirExpression.FieldAccess(receiver, JsirField.Backing(variable))
                     context.assign(access, context.generate(initializer))
@@ -466,10 +468,37 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         return generateFunctionDeclaration(expression.functionLiteral)
     }
 
-    private fun generateFunctionDeclaration(functionPsi: KtDeclarationWithBody): JsirExpression {
-        if (!functionPsi.hasBody()) return JsirExpression.Undefined
+    override fun visitPrimaryConstructor(constructor: KtPrimaryConstructor, data: JsirContext?): JsirExpression {
+        return generateFunctionDeclaration(constructor)
+    }
 
+    override fun visitAnonymousInitializer(initializer: KtAnonymousInitializer, data: JsirContext?): JsirExpression {
+        context.nestedBlock(context.container.initializerBody) {
+            val body = initializer.body
+            if (body != null) {
+                context.append(context.generate(body))
+            }
+        }
+        return JsirExpression.Undefined
+    }
+
+    private fun generateFunctionDeclaration(functionPsi: KtDeclarationWithBody): JsirExpression {
         val descriptor = context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, functionPsi] as FunctionDescriptor
+
+        for (parameterPsi in functionPsi.valueParameters) {
+            val parameter = BindingUtils.getDescriptorForElement(context.bindingContext, parameterPsi) as ValueParameterDescriptor
+            val property = context.bindingContext[BindingContext.VALUE_PARAMETER_AS_PROPERTY, parameter]
+            if (property != null) {
+                context.container.properties[property] = JsirProperty(property)
+                generateAccessor(null, property.getter)
+                generateAccessor(null, property.setter)
+                context.nestedBlock(context.container.initializerBody) {
+                    val lhs = JsirExpression.FieldAccess(JsirExpression.This, JsirField.Backing(property))
+                    context.assign(lhs, context.getVariable(parameter).get())
+                }
+            }
+        }
+
         context.nestedFunction(descriptor) {
             val function = JsirFunction(descriptor)
             for (parameter in descriptor.valueParameters) {
@@ -492,8 +521,16 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                     context.append(conditional)
                 }
 
-                val returnValue = context.generate(functionPsi.bodyExpression!!)
-                context.append(JsirStatement.Return(returnValue, descriptor))
+                if (descriptor is ConstructorDescriptor) {
+                    function.body += context.container.initializerBody
+                    context.container.initializerBody.clear()
+                }
+
+                val returnValue = functionPsi.bodyExpression?.let { context.generate(it) } ?: JsirExpression.Undefined
+
+                if (descriptor !is ConstructorDescriptor) {
+                    context.append(JsirStatement.Return(returnValue, descriptor))
+                }
             }
 
             context.container.functions[function.declaration] = function

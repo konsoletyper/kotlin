@@ -20,8 +20,8 @@ import org.jetbrains.kotlin.js.ir.*
 import org.jetbrains.kotlin.js.ir.generate.negate
 
 class CompareToElimination : Optimization {
-    override fun apply(function: JsirFunction): List<Optimization> {
-        function.body.replace { expression -> replaceCompareTo(expression) ?: expression }
+    override fun apply(parameters: List<JsirVariable>, body: MutableList<JsirStatement>): List<Optimization> {
+        body.replace { expression -> replaceCompareTo(expression) ?: expression }
         return emptyList()
     }
 

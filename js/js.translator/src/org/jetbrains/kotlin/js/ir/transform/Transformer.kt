@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.js.ir.transform
 
+import org.jetbrains.kotlin.js.ir.JsirContainer
 import org.jetbrains.kotlin.js.ir.JsirPool
 import org.jetbrains.kotlin.js.ir.transform.intrinsics.IntrinsicsTransformation
 import org.jetbrains.kotlin.js.ir.transform.optimize.OptimizingTransformation
@@ -24,8 +25,16 @@ class Transformer {
     val transformations = listOf(IntrinsicsTransformation(), OptimizingTransformation())
 
     fun transform(pool: JsirPool) {
-        for (function in pool.functions.values) {
-            transformations.forEach { it.apply(function) }
+        transformContainer(pool)
+        for (cls in pool.classes.values) {
+            transformContainer(cls)
+        }
+    }
+
+    private fun transformContainer(container: JsirContainer) {
+        transformations.forEach { it.apply(emptyList(), container.initializerBody) }
+        for (function in container.functions.values) {
+            transformations.forEach { it.apply(function.parameters, function.body) }
         }
     }
 }
