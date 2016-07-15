@@ -31,6 +31,7 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
     private var currentSource: PsiElement? = null
     private val labeledStatements = mutableMapOf<String, JsirLabeled>()
     private val continueReplacementsImpl = mutableMapOf<JsirLabeled, JsirLabeled>()
+    val pool = JsirPool(module)
 
     val bindingContext: BindingContext
         get() = bindingTrace.bindingContext
@@ -47,6 +48,10 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         get
         private set
 
+    var container: JsirContainer = pool
+        get
+        private set
+
     var defaultContinueTarget: JsirLabeled? = null
         get
         private set
@@ -57,8 +62,6 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
 
     val continueReplacements: Map<JsirLabeled, JsirLabeled>
         get() = continueReplacementsImpl
-
-    val pool = JsirPool(module)
 
     fun append(statement: JsirStatement): JsirContext {
         if (resultingStatements.isNotEmpty() && isTerminalStatement(resultingStatements.last())) {
@@ -143,6 +146,24 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
             declaredLocalVariables = oldDeclaredVariables
             this.function = oldFunction
             declaration = oldDeclaration
+        }
+    }
+
+    fun nestedClass(cls: JsirClass, action: () -> Unit) {
+        val oldClass = classDescriptor
+        val oldDeclaration = declaration
+        val oldContainer = container
+        classDescriptor = cls.declaration
+        declaration = cls.declaration
+        container = if (container == pool) cls else container
+
+        try {
+            action()
+        }
+        finally {
+            classDescriptor = oldClass
+            declaration = oldDeclaration
+            container = oldContainer
         }
     }
 

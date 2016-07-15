@@ -16,10 +16,7 @@
 
 package org.jetbrains.kotlin.js.ir.generate
 
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.descriptors.VariableDescriptor
-import org.jetbrains.kotlin.descriptors.VariableDescriptorWithAccessors
+import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.ir.JsirExpression
 import org.jetbrains.kotlin.js.ir.JsirField
 import org.jetbrains.kotlin.psi.KtArrayAccessExpression
@@ -46,6 +43,10 @@ internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, argum
     val descriptor = resolvedCall.resultingDescriptor
     if (descriptor is VariableDescriptor && descriptor.containingDeclaration is FunctionDescriptor) {
         return getVariable(descriptor).get()
+    }
+
+    if (descriptor is ConstructorDescriptor) {
+        return JsirExpression.NewInstance(descriptor, *generateArguments(resolvedCall, argumentsFactory).toTypedArray())
     }
 
     val (receiverExpr, extensionExpr) = generateReceiver(resolvedCall, receiverFactory)
@@ -87,7 +88,7 @@ private fun JsirContext.generateArguments(
 
 internal fun JsirContext.generateVariable(psi: KtExpression): VariableAccessor {
     val receiverFactory: (() -> JsirExpression)? = when (psi) {
-        is KtQualifiedExpression -> ({ generate(psi.receiverExpression) })
+        is KtQualifiedExpression -> ({ memoize(psi.receiverExpression) })
         is KtArrayAccessExpression -> return generateArrayVariable(psi)
         else -> null
     }

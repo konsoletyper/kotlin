@@ -87,8 +87,14 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             wrapperFunction.body.statements += property.initializerBody.flatMap { initRenderer.renderStatement(it) }
         }
 
+        for (cls in pool.classes.values) {
+            renderClass(cls)
+        }
+
         for (function in pool.functions.values) {
-            wrapperFunction.body.statements += renderFunction(function).makeStmt()
+            val jsFunction = renderFunction(function)
+            jsFunction.name = getInternalName(function.declaration)
+            wrapperFunction.body.statements += jsFunction.makeStmt()
         }
 
         wrapperFunction.body.statements.addAll(0, importsSection)
@@ -105,6 +111,19 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         wrapperFunction.body.statements += JsReturn(topLevel.makeRef())
 
         return wrapperFunction
+    }
+
+    fun renderClass(cls: JsirClass) {
+        val constructorName = getInternalName(cls.declaration)
+        val constructor = JsFunction(wrapperFunction.scope, JsBlock(), cls.declaration.toString())
+        constructor.name = constructorName
+        wrapperFunction.body.statements += constructor.makeStmt()
+
+        for (function in cls.functions.values) {
+            val prototype = JsNameRef("prototype", constructorName.makeRef())
+            val lhs = JsNameRef(getSuggestedName(function.declaration), prototype)
+            wrapperFunction.body.statements += JsAstUtils.assignment(lhs, renderFunction(function)).makeStmt()
+        }
     }
 
     fun renderFunction(function: JsirFunction): JsFunction {
@@ -126,7 +145,6 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             constructor.body.statements += JsReturn(renderRawFunction(function, constructor.scope, freeVariableNames))
             constructor
         }
-        result.name = getInternalName(function.declaration)
 
         return result
     }
@@ -158,6 +176,12 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             val jsPackage = getPackage(container.fqName)
             val key = jsPackage.scope.declareName(name).makeRef()
             jsPackage.jsObject.propertyInitializers += JsPropertyInitializer(key, getInternalName(function).makeRef())
+        }
+        for (cls in pool.classes.keys.filter { it.isEffectivelyPublicApi }) {
+            val name = ManglingUtils.getSuggestedName(cls)
+            val jsPackage = getPackage(DescriptorUtils.getParentOfType(cls, PackageFragmentDescriptor::class.java)!!.fqName)
+            val key = jsPackage.scope.declareName(name).makeRef()
+            jsPackage.jsObject.propertyInitializers += JsPropertyInitializer(key, getInternalName(cls).makeRef())
         }
     }
 

@@ -201,7 +201,19 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         return JsirExpression.Undefined
     }
 
-    override fun visitClass(klass: KtClass, data: JsirContext?): JsirExpression {
+    override fun visitClass(psi: KtClass, data: JsirContext): JsirExpression {
+        val descriptor = BindingUtils.getDescriptorForElement(context.bindingContext, psi) as ClassDescriptor
+        val cls = JsirClass(descriptor)
+        context.pool.classes[cls.declaration] = cls
+        context.nestedClass(cls) {
+            val bodyPsi = psi.getBody()
+            if (bodyPsi != null) {
+                for (declaration in bodyPsi.declarations) {
+                    declaration.accept(this, data)
+                }
+            }
+        }
+
         return JsirExpression.Undefined
     }
 
@@ -263,7 +275,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                 }
             }
 
-            context.pool.addProperty(propertyDeclaration)
+            context.container.properties[propertyDeclaration.declaration] = propertyDeclaration
             generateAccessor(propertyPsi.getter, variable.getter)
             generateAccessor(propertyPsi.setter, variable.setter)
         }
@@ -294,7 +306,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                 function.parameters += parameter
                 function.body += JsirStatement.Assignment(access, parameter.makeReference())
             }
-            context.pool.addFunction(function)
+            context.container.functions[function.declaration] = function
         }
     }
 
@@ -484,7 +496,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                 context.append(JsirStatement.Return(returnValue, descriptor))
             }
 
-            context.pool.addFunction(function)
+            context.container.functions[function.declaration] = function
         }
 
         return JsirExpression.FunctionReference(descriptor)
