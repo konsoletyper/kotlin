@@ -18,7 +18,7 @@ package org.jetbrains.kotlin.js.ir
 
 fun JsirFunction.prettyPrint(): String {
     val writer = SourceWriter()
-    val params = "(" + parameters.asSequence().map { writer.getVariable(it) }.joinToString(" ") + ")"
+    val params = "(" + parameters.asSequence().map { writer.getVariable(it.variable) }.joinToString(" ") + ")"
     writer.block("def ${declaration.name} $params") {
         body.prettyPrint(writer)
     }

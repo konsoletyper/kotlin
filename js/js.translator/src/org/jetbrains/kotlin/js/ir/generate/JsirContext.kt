@@ -31,6 +31,7 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
     private var currentSource: PsiElement? = null
     private val labeledStatements = mutableMapOf<String, JsirLabeled>()
     private val continueReplacementsImpl = mutableMapOf<JsirLabeled, JsirLabeled>()
+    private val extensionParametersImpl = mutableMapOf<FunctionDescriptor, JsirVariable?>()
     val pool = JsirPool(module)
 
     val bindingContext: BindingContext
@@ -62,6 +63,9 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
 
     val continueReplacements: Map<JsirLabeled, JsirLabeled>
         get() = continueReplacementsImpl
+
+    val extensionParameters: Map<FunctionDescriptor, JsirVariable?>
+        get() = extensionParametersImpl
 
     fun append(statement: JsirStatement): JsirContext {
         if (resultingStatements.isNotEmpty() && isTerminalStatement(resultingStatements.last())) {
@@ -130,13 +134,14 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         return { resultingStatements = backup }
     }
 
-    fun nestedFunction(function: FunctionDescriptor, action: () -> Unit) {
+    fun nestedFunction(function: FunctionDescriptor, extensionParameter: JsirVariable?, action: () -> Unit) {
         val oldDeclaredVariables = declaredLocalVariables
         val oldFunction = this.function
         val oldDeclaration = declaration
         declaredLocalVariables = mutableSetOf()
         this.function = function
         declaration = function
+        extensionParametersImpl[function] = extensionParameter
 
         try {
             action()
@@ -146,8 +151,12 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
             declaredLocalVariables = oldDeclaredVariables
             this.function = oldFunction
             declaration = oldDeclaration
+            extensionParametersImpl.keys -= function
         }
     }
+
+    val extensionParameter: JsirVariable?
+        get() = extensionParametersImpl[function]
 
     fun nestedClass(cls: JsirClass, action: () -> Unit) {
         val oldClass = classDescriptor

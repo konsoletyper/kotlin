@@ -56,8 +56,15 @@ private fun JsirContext.generateIn(expression: KtBinaryExpression): JsirExpressi
 }
 
 private fun JsirContext.generateElvis(leftPsi: KtExpression, rightPsi: KtExpression): JsirExpression {
-    val left = memoize(leftPsi)
-    return JsirExpression.Conditional(left.nullCheck(), left, generate(rightPsi))
+    val result = JsirVariable().makeReference()
+    assign(result, generate(leftPsi))
+    val conditional = JsirStatement.If(result.nullCheck())
+    nestedBlock(conditional.thenBody) {
+        assign(result, generate(rightPsi))
+    }
+    append(conditional)
+
+    return result
 }
 
 private fun JsirContext.generateAssignment(psi: KtBinaryExpression) {

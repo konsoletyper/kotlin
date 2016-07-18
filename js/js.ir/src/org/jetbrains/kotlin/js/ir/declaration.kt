@@ -28,8 +28,12 @@ interface JsirContainer {
 }
 
 class JsirFunction(val declaration: FunctionDescriptor) {
-    val parameters = mutableListOf<JsirVariable>()
+    val parameters = mutableListOf<JsirParameter>()
     val body = mutableListOf<JsirStatement>()
+}
+
+class JsirParameter(val variable: JsirVariable) {
+    val defaultBody = mutableListOf<JsirStatement>()
 }
 
 class JsirProperty(val declaration: VariableDescriptorWithAccessors)

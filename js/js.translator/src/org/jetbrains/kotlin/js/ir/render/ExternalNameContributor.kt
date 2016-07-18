@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.transform
+package org.jetbrains.kotlin.js.ir.render
 
-import org.jetbrains.kotlin.js.ir.JsirParameter
-import org.jetbrains.kotlin.js.ir.JsirStatement
-import org.jetbrains.kotlin.js.ir.JsirVariable
+import com.google.dart.compiler.backend.js.ast.JsExpression
+import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 
-interface Transformation {
-    fun apply(parameters: List<JsirVariable>, body: MutableList<JsirStatement>)
+interface ExternalNameContributor {
+    fun contribute(declaration: DeclarationDescriptor, context: JsirRenderingContext): JsExpression?
 }

@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.transform
+package org.jetbrains.kotlin.js.ir.render
 
-import org.jetbrains.kotlin.js.ir.JsirParameter
-import org.jetbrains.kotlin.js.ir.JsirStatement
-import org.jetbrains.kotlin.js.ir.JsirVariable
+import org.jetbrains.kotlin.js.ir.JsirClass
+import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils
 
-interface Transformation {
-    fun apply(parameters: List<JsirVariable>, body: MutableList<JsirStatement>)
+class NativeClassFilter : (JsirClass) -> Boolean {
+    override fun invoke(cls: JsirClass) = !AnnotationsUtils.isNativeObject(cls.declaration)
 }

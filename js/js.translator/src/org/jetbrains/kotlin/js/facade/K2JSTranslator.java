@@ -16,9 +16,8 @@
 
 package org.jetbrains.kotlin.js.facade;
 
-import com.google.dart.compiler.backend.js.ast.JsFunction;
+import com.google.dart.compiler.backend.js.ast.JsObjectScope;
 import com.google.dart.compiler.backend.js.ast.JsProgram;
-import com.google.dart.compiler.backend.js.ast.RecursiveJsVisitor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
@@ -27,11 +26,11 @@ import org.jetbrains.kotlin.js.analyzer.JsAnalysisResult;
 import org.jetbrains.kotlin.js.config.JsConfig;
 import org.jetbrains.kotlin.js.facade.exceptions.TranslationException;
 import org.jetbrains.kotlin.js.inline.JsInliner;
-import org.jetbrains.kotlin.js.inline.clean.FunctionPostProcessor;
 import org.jetbrains.kotlin.js.ir.JsirPool;
 import org.jetbrains.kotlin.js.ir.generate.JsirGenerator;
-import org.jetbrains.kotlin.js.ir.render.JsirRenderer;
+import org.jetbrains.kotlin.js.ir.render.*;
 import org.jetbrains.kotlin.js.ir.transform.Transformer;
+import org.jetbrains.kotlin.js.translate.context.StandardClasses;
 import org.jetbrains.kotlin.js.translate.context.TranslationContext;
 import org.jetbrains.kotlin.js.translate.general.Translation;
 import org.jetbrains.kotlin.progress.ProgressIndicatorAndCompilationCanceledStatus;
@@ -96,7 +95,17 @@ public final class K2JSTranslator {
         Transformer transformer = new Transformer();
         transformer.transform(pool);
 
-        JsProgram altProgram = JsirRenderer.INSTANCE.render(irGenerator.getContext().getPool());
+        JsirRenderer renderer = new JsirRenderer();
+        renderer.getInvocationRenderers().add(new EqualsRenderer());
+        renderer.getInvocationRenderers().add(new ToStringRenderer());
+        renderer.getInvocationRenderers().add(new RangeMethodRenderer());
+        renderer.getInvocationRenderers().add(new NativeInvocationRenderer());
+        renderer.getClassFilters().add(new NativeClassFilter());
+        renderer.getFunctionFilters().add(new NativeFunctionFilter());
+        renderer.getExternalNameContributors().add(new BuiltinNameContributor(
+                StandardClasses.bindImplementations(new JsObjectScope(new JsProgram("").getRootScope(), "", null))));
+        renderer.getExternalNameContributors().add(new NativeNameContributor());
+        JsProgram altProgram = renderer.render(irGenerator.getContext().getPool());
         /*altProgram.getGlobalBlock().accept(new RecursiveJsVisitor() {
             @Override
             public void visitFunction(@NotNull JsFunction x) {

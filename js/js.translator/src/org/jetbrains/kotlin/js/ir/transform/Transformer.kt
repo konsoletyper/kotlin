@@ -34,7 +34,11 @@ class Transformer {
     private fun transformContainer(container: JsirContainer) {
         transformations.forEach { it.apply(emptyList(), container.initializerBody) }
         for (function in container.functions.values) {
-            transformations.forEach { it.apply(function.parameters, function.body) }
+            val functionParameters = function.parameters.map { it.variable }
+            for (parameter in function.parameters) {
+                transformations.forEach { it.apply(functionParameters, parameter.defaultBody) }
+            }
+            transformations.forEach { it.apply(functionParameters, function.body) }
         }
     }
 }
