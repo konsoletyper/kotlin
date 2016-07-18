@@ -18,7 +18,7 @@ package org.jetbrains.kotlin.js.ir.analyze
 
 import org.jetbrains.kotlin.js.ir.*
 
-fun JsirFunction.collectFreeVariables() = body.collectFreeVariables()
+fun JsirFunction.collectFreeVariables() = body.collectFreeVariables() + parameters.flatMap { it.defaultBody.collectFreeVariables() }
 
 fun List<JsirStatement>.collectFreeVariables(): Set<JsirVariable> {
     val variables = mutableSetOf<JsirVariable>()

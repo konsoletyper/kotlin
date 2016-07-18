@@ -143,6 +143,8 @@ sealed class JsirField {
     class Backing(val property: VariableDescriptor) : JsirField()
 
     class OuterClass(val classDescriptor: ClassDescriptor) : JsirField()
+
+    class Closure(val variable: JsirVariable) : JsirField()
 }
 
 class JsirVariable(val suggestedName: String? = null)

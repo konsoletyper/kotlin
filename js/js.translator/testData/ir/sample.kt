@@ -27,11 +27,21 @@ object C : A() {
     override fun toString() = "obj($z)"
 }
 
+fun test(x: Int): Int {
+    class QQQ() {
+        inner class PPP() {
+            fun bzz() = x
+        }
+    }
+    return QQQ().PPP().bzz()
+}
+
 fun box(): String {
     println(A(10).Inner(20).foo())
     println(A(10).Inner2().foo())
 
     println(A(23).toString() + ", " + B() + ", " + C + ", " + C.y)
+    println(test(555))
 
     return "OK"
 }

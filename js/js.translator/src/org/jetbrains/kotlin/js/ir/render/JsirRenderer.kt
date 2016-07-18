@@ -93,7 +93,13 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     val rootPackage = Package()
     val module = pool.module
     val moduleNames = mutableListOf<String>()
-    val freeVariablesByFunction = pool.functions.values.asSequence().map { it to it.collectFreeVariables() }.toMap()
+    val freeVariablesByFunction: Map<JsirFunction, Set<JsirVariable>>
+
+    init {
+        val allFunctions = (pool.functions.values.asSequence() + pool.classes.values.asSequence()
+                .flatMap { it.functions.values.asSequence() })
+        freeVariablesByFunction = allFunctions.map { it to it.collectFreeVariables() }.toMap()
+    }
 
     fun render(): JsFunction {
         val initRenderer = StatementRenderer(wrapperFunction)
@@ -726,6 +732,9 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                         JsNameRef("\$outer", receiver!!.render()).apply {
                             sideEffects = SideEffectKind.DEPENDS_ON_STATE
                         }
+                    }
+                    is JsirField.Closure -> {
+                        JsNameRef("closure\$${field.variable.suggestedName}", receiver!!.render())
                     }
                 }
             }

@@ -209,7 +209,7 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
     }
     is JsirExpression.FieldAccess -> {
         val operation = if (receiver != null) "get" else "get-static"
-        val fieldString = field.prettyPrint()
+        val fieldString = field.prettyPrint(writer)
         writer.block("$operation $fieldString") {
             receiver?.prettyPrint(writer)
         }
@@ -259,9 +259,10 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
     is JsirExpression.ObjectReference -> writer.constant("(object ${descriptor.name.asString()})")
 }
 
-private fun JsirField.prettyPrint() = when (this) {
+private fun JsirField.prettyPrint(writer: SourceWriter) = when (this) {
     is JsirField.Backing -> property.name.toString()
     is JsirField.OuterClass -> "\$outer"
+    is JsirField.Closure -> "closure${writer.getVariable(variable)}"
 }
 
 private fun JsirBinaryOperation.getSymbol() = when (this) {

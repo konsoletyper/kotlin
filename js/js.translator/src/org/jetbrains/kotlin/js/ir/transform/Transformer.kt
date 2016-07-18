@@ -25,6 +25,7 @@ class Transformer {
     val transformations = listOf(IntrinsicsTransformation(), OptimizingTransformation())
 
     fun transform(pool: JsirPool) {
+        ClassClosureTransformation().apply(pool)
         transformContainer(pool)
         for (cls in pool.classes.values) {
             transformContainer(cls)

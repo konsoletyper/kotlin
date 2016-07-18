@@ -16,10 +16,7 @@
 
 package org.jetbrains.kotlin.js.ir
 
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.descriptors.VariableDescriptorWithAccessors
+import org.jetbrains.kotlin.descriptors.*
 
 interface JsirContainer {
     val functions: MutableMap<FunctionDescriptor, JsirFunction>
@@ -46,6 +43,8 @@ class JsirClass(val declaration: ClassDescriptor) : JsirContainer {
     override val properties = mutableMapOf<VariableDescriptorWithAccessors, JsirProperty>()
 
     var hasOuterProperty = false
+
+    val closureFields = mutableSetOf<JsirVariable>()
 }
 
 class JsirPool(val module: ModuleDescriptor) : JsirContainer {

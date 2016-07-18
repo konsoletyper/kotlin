@@ -16,7 +16,6 @@
 
 package org.jetbrains.kotlin.js.ir.transform
 
-import org.jetbrains.kotlin.js.ir.JsirParameter
 import org.jetbrains.kotlin.js.ir.JsirStatement
 import org.jetbrains.kotlin.js.ir.JsirVariable
 
