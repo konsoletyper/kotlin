@@ -44,6 +44,8 @@ class JsirClass(val declaration: ClassDescriptor) : JsirContainer {
     override val functions = mutableMapOf<FunctionDescriptor, JsirFunction>()
 
     override val properties = mutableMapOf<VariableDescriptorWithAccessors, JsirProperty>()
+
+    var hasOuterProperty = false
 }
 
 class JsirPool(val module: ModuleDescriptor) : JsirContainer {

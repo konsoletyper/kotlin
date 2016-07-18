@@ -31,9 +31,11 @@ import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall
 import org.jetbrains.kotlin.resolve.constants.NullValue
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator
+import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassNotAny
 import org.jetbrains.kotlin.types.TypeUtils
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils.isFunctionExpression
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils.isFunctionLiteral
+import org.jetbrains.kotlin.utils.singletonOrEmptyList
 
 class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescriptor) : KtVisitor<JsirExpression, JsirContext>() {
     val context: JsirContext = JsirContext(bindingTrace, module) { expr ->
@@ -202,11 +204,16 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         return JsirExpression.Undefined
     }
 
-    override fun visitClass(psi: KtClass, data: JsirContext): JsirExpression {
+    override fun visitClassOrObject(psi: KtClassOrObject, data: JsirContext): JsirExpression {
         val descriptor = BindingUtils.getDescriptorForElement(context.bindingContext, psi) as ClassDescriptor
         val cls = JsirClass(descriptor)
+        val outerParameter = if (descriptor.isInner) JsirVariable("\$outer") else null
         context.pool.classes[cls.declaration] = cls
-        context.nestedClass(cls) {
+        context.nestedClass(cls, outerParameter) {
+            if (outerParameter != null && !(descriptor.getSuperClassNotAny()?.isInner ?: false)) {
+                cls.hasOuterProperty = true
+            }
+
             val primaryConstructorPsi = psi.getPrimaryConstructor()
             if (primaryConstructorPsi != null) {
                 primaryConstructorPsi.accept(this, data)
@@ -215,7 +222,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                 val constructorDescriptor = context.bindingContext[BindingContext.CONSTRUCTOR, psi]
                 if (constructorDescriptor != null) {
                     context.nestedBlock(cls.initializerBody) {
-                        synthesizeSuperCall(constructorDescriptor!!)
+                        synthesizeSuperCall(constructorDescriptor)
                     }
                 }
             }
@@ -428,28 +435,25 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     override fun visitSimpleNameExpression(expression: KtSimpleNameExpression, data: JsirContext?): JsirExpression {
-        val resolvedCall = expression.getResolvedCall(context.bindingContext)!!
-        return context.generateInvocation(resolvedCall, null)
+        val resolvedCall = expression.getResolvedCall(context.bindingContext)
+        if (resolvedCall != null) {
+            return context.generateInvocation(resolvedCall, null)
+        }
+        else {
+            val descriptor = context.bindingContext[BindingContext.REFERENCE_TARGET, expression] as ClassDescriptor
+            assert(descriptor.kind == ClassKind.OBJECT) { "Expected object, encountered ${descriptor.kind}" }
+            return JsirExpression.ObjectReference(descriptor)
+        }
     }
 
     override fun visitThisExpression(expression: KtThisExpression, data: JsirContext?): JsirExpression {
         val resolvedCall = expression.getResolvedCall(context.bindingContext) ?: return JsirExpression.This
 
         val descriptor = (resolvedCall.resultingDescriptor as ReceiverParameterDescriptor).containingDeclaration
-        return if (descriptor is ClassDescriptor) {
-            var result: JsirExpression = JsirExpression.This
-            var currentClass = context.classDescriptor!!
-            while (currentClass != descriptor) {
-                result = JsirExpression.FieldAccess(result, JsirField.OuterClass(currentClass))
-                currentClass = currentClass.containingDeclaration as ClassDescriptor
-            }
-            result
-        }
-        else if (descriptor is FunctionDescriptor) {
-            context.extensionParameters[descriptor]!!.makeReference()
-        }
-        else {
-            super.visitThisExpression(expression, data)
+        return when (descriptor) {
+            is ClassDescriptor -> context.generateThis(descriptor)
+            is FunctionDescriptor -> context.extensionParameters[descriptor]!!.makeReference()
+            else -> super.visitThisExpression(expression, data)
         }
     }
 
@@ -539,6 +543,19 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         }
 
         context.nestedFunction(descriptor, extensionParameter) {
+            val outerParameter = context.outerParameter
+            if (descriptor is ConstructorDescriptor && outerParameter != null) {
+                function.parameters += JsirParameter(outerParameter)
+                val cls = descriptor.containingDeclaration
+                if (descriptor.isPrimary && !(cls.getSuperClassNotAny()?.isInner ?: false)) {
+                    context.nestedBlock(function.body) {
+                        val fieldRef = JsirExpression.FieldAccess(
+                                JsirExpression.This,
+                                JsirField.OuterClass(descriptor.containingDeclaration))
+                        context.assign(fieldRef, outerParameter.makeReference())
+                    }
+                }
+            }
             for (parameterDescriptor in descriptor.valueParameters) {
                 val parameter = JsirParameter(context.getVariable(parameterDescriptor).localVariable)
                 val parameterPsi = functionPsi.valueParameters[parameterDescriptor.index]
@@ -576,7 +593,8 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         if (delegatedCall != null) {
             val delegatedConstructor = delegatedCall.resultingDescriptor
             val receiver = JsirExpression.This
-            val arguments = context.generateArguments(delegatedCall, context.generateRawArguments(delegatedCall))
+            val arguments = context.outerParameter?.makeReference().singletonOrEmptyList() +
+                            context.generateArguments(delegatedCall, context.generateRawArguments(delegatedCall))
             val invocation = JsirExpression.Invocation(receiver, delegatedConstructor, false, *arguments.toTypedArray())
 
             context.append(invocation)

@@ -67,6 +67,10 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
     val extensionParameters: Map<FunctionDescriptor, JsirVariable?>
         get() = extensionParametersImpl
 
+    var outerParameter: JsirVariable? = null
+        get
+        private set
+
     fun append(statement: JsirStatement): JsirContext {
         if (resultingStatements.isNotEmpty() && isTerminalStatement(resultingStatements.last())) {
             return this
@@ -155,16 +159,15 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         }
     }
 
-    val extensionParameter: JsirVariable?
-        get() = extensionParametersImpl[function]
-
-    fun nestedClass(cls: JsirClass, action: () -> Unit) {
+    fun nestedClass(cls: JsirClass, outerParameter: JsirVariable?, action: () -> Unit) {
         val oldClass = classDescriptor
         val oldDeclaration = declaration
         val oldContainer = container
+        val oldOuterParameter = this.outerParameter
         classDescriptor = cls.declaration
         declaration = cls.declaration
-        container = if (container == pool) cls else container
+        container = cls
+        this.outerParameter = outerParameter
 
         try {
             action()
@@ -173,6 +176,7 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
             classDescriptor = oldClass
             declaration = oldDeclaration
             container = oldContainer
+            this.outerParameter = oldOuterParameter
         }
     }
 

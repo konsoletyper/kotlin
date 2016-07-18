@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.js.ir.generate
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.ir.JsirExpression
 import org.jetbrains.kotlin.js.ir.JsirField
+import org.jetbrains.kotlin.js.ir.makeReference
 import org.jetbrains.kotlin.psi.KtArrayAccessExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
@@ -27,7 +28,9 @@ import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
+import org.jetbrains.kotlin.resolve.calls.util.FakeCallableDescriptorForObject
 import org.jetbrains.kotlin.resolve.scopes.receivers.*
+import org.jetbrains.kotlin.utils.singletonOrEmptyList
 
 internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, receiverFactory: (() -> JsirExpression)?): JsirExpression {
     val translatedArguments = ({ generateRawArguments(resolvedCall) })
@@ -51,7 +54,10 @@ internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, argum
     }
 
     if (descriptor is ConstructorDescriptor) {
-        return JsirExpression.NewInstance(descriptor, *generateArguments(resolvedCall, argumentsFactory()).toTypedArray())
+        val receiver = if (resolvedCall.dispatchReceiver != null) generateReceiver(resolvedCall, receiverFactory).first!! else null
+        val arguments = generateArguments(resolvedCall, argumentsFactory())
+
+        return JsirExpression.NewInstance(descriptor, *(receiver.singletonOrEmptyList() + arguments).toTypedArray())
     }
 
     val (receiverExpr, extensionExpr) = generateReceiver(resolvedCall, receiverFactory)
@@ -61,6 +67,8 @@ internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, argum
         is VariableDescriptorWithAccessors -> {
             descriptor.getter!!
         }
+        is ClassDescriptor -> return JsirExpression.ObjectReference(descriptor)
+        is FakeCallableDescriptorForObject -> return JsirExpression.ObjectReference(descriptor.classDescriptor)
         else -> descriptor as FunctionDescriptor
     }
 
@@ -182,11 +190,27 @@ internal fun JsirContext.generateImplicitReceiver(receiver: ReceiverValue?) = wh
 internal fun JsirContext.generateThis(descriptor: ClassDescriptor): JsirExpression {
     var result: JsirExpression = JsirExpression.This
     var currentClass = classDescriptor!!
+    val outerParameter = this.outerParameter
     while (currentClass != descriptor) {
-        result = JsirExpression.FieldAccess(result, JsirField.OuterClass(currentClass))
+        result = if (result == JsirExpression.This && outerParameter != null && isInConstructor) {
+            outerParameter.makeReference()
+        }
+        else {
+            JsirExpression.FieldAccess(result, JsirField.OuterClass(currentClass))
+        }
         currentClass = currentClass.containingDeclaration as ClassDescriptor
     }
     return result
 }
+
+private val JsirContext.isInConstructor: Boolean
+    get() {
+        val declaration = declaration
+        return when (declaration) {
+            is ClassDescriptor,
+            is ConstructorDescriptor -> true
+            else -> false
+        }
+    }
 
 internal fun JsirContext.defaultReceiverFactory(psi: KtExpression?): (() -> JsirExpression)? = psi?.let { ({ memoize(it) }) }

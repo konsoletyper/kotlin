@@ -42,6 +42,8 @@ sealed class JsirExpression {
 
     class FunctionReference(var function: FunctionDescriptor) : JsirExpression()
 
+    class ObjectReference(var descriptor: ClassDescriptor) : JsirExpression()
+
     class Invocation(
             var receiver: JsirExpression?,
             var function: FunctionDescriptor,
