@@ -28,7 +28,6 @@ import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.BindingContextUtils
 import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
-import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall
 import org.jetbrains.kotlin.resolve.constants.NullValue
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator
 import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassNotAny
@@ -226,23 +225,32 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                 cls.hasOuterProperty = true
             }
 
-            val primaryConstructorPsi = psi.getPrimaryConstructor()
-            if (primaryConstructorPsi != null) {
-                primaryConstructorPsi.accept(this, context)
-            }
-            else {
-                val constructorDescriptor = context.bindingContext[BindingContext.CONSTRUCTOR, psi]
+            context.nestedVariableScope {
+                val primaryConstructorPsi = psi.getPrimaryConstructor()
+                val constructorDescriptor = context.bindingContext[BindingContext.CONSTRUCTOR, psi] ?:
+                                            context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, primaryConstructorPsi] as?
+                                            ConstructorDescriptor
+
                 if (constructorDescriptor != null) {
+                    for (parameterDescriptor in constructorDescriptor.valueParameters) {
+                        JsirParameter(context.getVariable(parameterDescriptor).localVariable)
+                    }
+                }
+
+                if (primaryConstructorPsi != null) {
+                    primaryConstructorPsi.accept(this, context)
+                }
+                else if (constructorDescriptor != null) {
                     context.nestedBlock(cls.initializerBody) {
                         synthesizeSuperCall(constructorDescriptor)
                     }
                 }
-            }
 
-            val bodyPsi = psi.getBody()
-            if (bodyPsi != null) {
-                for (declaration in bodyPsi.declarations) {
-                    declaration.accept(this, context)
+                val bodyPsi = psi.getBody()
+                if (bodyPsi != null) {
+                    for (declaration in bodyPsi.declarations) {
+                        declaration.accept(this, context)
+                    }
                 }
             }
         }

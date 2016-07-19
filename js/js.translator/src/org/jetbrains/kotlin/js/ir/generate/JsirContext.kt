@@ -139,23 +139,31 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
     }
 
     fun nestedFunction(function: FunctionDescriptor, extensionParameter: JsirVariable?, action: () -> Unit) {
-        val oldDeclaredVariables = declaredLocalVariables
         val oldFunction = this.function
         val oldDeclaration = declaration
-        declaredLocalVariables = mutableSetOf()
         this.function = function
         declaration = function
         extensionParametersImpl[function] = extensionParameter
 
+        try {
+            nestedVariableScope(action)
+        }
+        finally {
+            this.function = oldFunction
+            declaration = oldDeclaration
+            extensionParametersImpl.keys -= function
+        }
+    }
+
+    fun nestedVariableScope(action: () -> Unit) {
+        val oldDeclaredVariables = declaredLocalVariables
+        declaredLocalVariables = mutableSetOf()
         try {
             action()
         }
         finally {
             localVariables.keys -= declaredLocalVariables
             declaredLocalVariables = oldDeclaredVariables
-            this.function = oldFunction
-            declaration = oldDeclaration
-            extensionParametersImpl.keys -= function
         }
     }
 
@@ -243,6 +251,6 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
             assign(makeReference(), value)
         }
 
-        private fun makeReference() = JsirExpression.VariableReference(localVariable, declaringFunction != function)
+        private fun makeReference() = JsirExpression.VariableReference(localVariable, function != null && declaringFunction != function)
     }
 }

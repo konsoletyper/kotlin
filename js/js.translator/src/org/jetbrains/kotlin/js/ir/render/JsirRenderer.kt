@@ -193,7 +193,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         }
         if (descriptor.kind == ClassKind.OBJECT) {
             val instanceRef = JsNameRef("instance", constructorName.makeRef())
-            val instance = JsInvocation(constructorName.makeRef())
+            val instance = JsNew(constructorName.makeRef())
             wrapperFunction.body.statements += JsAstUtils.assignment(instanceRef, instance).makeStmt()
         }
 
