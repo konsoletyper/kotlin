@@ -38,7 +38,8 @@ class NativeInvocationRenderer() : InvocationRenderer {
         val function = invocation.function
         if (function is VariableAccessorDescriptor) {
             val property = function.correspondingVariable
-            val reference = JsNameRef(property.name.asString(), receiver ?: property.jsExpression(context))
+            val qualifier = receiver ?: (property.containingDeclaration as? ClassDescriptor)?.jsExpression(context)
+            val reference = JsNameRef(property.name.asString(), qualifier)
             return if (property.getter == function) {
                 reference
             }

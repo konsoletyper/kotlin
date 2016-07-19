@@ -141,6 +141,3 @@ sealed class JsirField {
     class Closure(val variable: JsirVariable) : JsirField()
 }
 
-class JsirVariable(val suggestedName: String? = null)
-
-fun JsirVariable.makeReference() = JsirExpression.VariableReference(this, false)

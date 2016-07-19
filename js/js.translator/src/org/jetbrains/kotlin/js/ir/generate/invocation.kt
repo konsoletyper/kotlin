@@ -44,7 +44,8 @@ internal fun JsirContext.generateRawArguments(resolvedCall: ResolvedCall<*>) = r
 internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, argumentsFactory: () -> List<List<JsirExpression>>,
                                             receiverFactory: (() -> JsirExpression)?): JsirExpression {
     if (resolvedCall is VariableAsFunctionResolvedCall) {
-        return generateInvocation(resolvedCall.variableCall, { emptyList() }, null)
+        val receiver = generateInvocation(resolvedCall.variableCall, { emptyList() }, null)
+        return generateInvocation(resolvedCall.functionCall, argumentsFactory) { receiver }
     }
 
     val descriptor = resolvedCall.resultingDescriptor

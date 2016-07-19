@@ -34,6 +34,7 @@ import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassNotAny
 import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyPublicApi
+import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.utils.singletonOrEmptyList
 
 class JsirRenderer {
@@ -94,11 +95,31 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     val module = pool.module
     val moduleNames = mutableListOf<String>()
     val freeVariablesByFunction: Map<JsirFunction, Set<JsirVariable>>
+    val descriptorToFunction: Map<FunctionDescriptor, JsirFunction>
 
     init {
         val allFunctions = (pool.functions.values.asSequence() + pool.classes.values.asSequence()
                 .flatMap { it.functions.values.asSequence() })
-        freeVariablesByFunction = allFunctions.map { it to it.collectFreeVariables() }.toMap()
+        descriptorToFunction = allFunctions.map { it.declaration to it }.toMap()
+        val freeVariablesByFunctionPrototype = allFunctions.map { it to mutableSetOf<JsirVariable>() }.toMap()
+        fun propagateFreeVariables(function: JsirFunction, variables: Set<JsirVariable>) {
+            val existing = freeVariablesByFunctionPrototype[function] ?: return
+            val newVariables = variables - existing
+            if (newVariables.isNotEmpty()) {
+                existing += newVariables
+                val outerFunctionDescriptor = function.declaration.containingDeclaration
+                if (outerFunctionDescriptor is FunctionDescriptor &&
+                    DescriptorUtils.isDescriptorWithLocalVisibility(outerFunctionDescriptor)
+                ) {
+                    val outerFunction = descriptorToFunction[outerFunctionDescriptor]!!
+                    propagateFreeVariables(outerFunction, newVariables)
+                }
+            }
+        }
+        for (function in allFunctions) {
+            propagateFreeVariables(function, function.collectFreeVariables())
+        }
+        freeVariablesByFunction = freeVariablesByFunctionPrototype
     }
 
     fun render(): JsFunction {
@@ -182,7 +203,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             val declaration = function.declaration
             if (declaration is ConstructorDescriptor && declaration.isPrimary) continue
 
-            val lhs = JsNameRef(getSuggestedName(function.declaration), makePrototype(constructorName))
+            val lhs = JsNameRef(getNameForMemberFunction(function.declaration), makePrototype(constructorName))
             wrapperFunction.body.statements += JsAstUtils.assignment(lhs, renderFunction(function)).makeStmt()
         }
     }
@@ -205,7 +226,9 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                 constructor.parameters += JsParameter(name)
             }
 
-            constructor.body.statements += JsReturn(renderRawFunction(function, constructor.scope, freeVariableNames))
+            val boundFunction = JsInvocation(JsNameRef("bind", renderRawFunction(function, constructor.scope, freeVariableNames)),
+                                             JsLiteral.THIS)
+            constructor.body.statements += JsReturn(boundFunction)
             constructor
         }
 
@@ -344,15 +367,26 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         val statementRenderer = StatementRenderer(wrapperFunction)
         val contributedName = externalNameContributors.asSequence()
                 .map { it.contribute(descriptor, statementRenderer) }
-                .first { it != null }
+                .firstOrNull { it != null }
         if (contributedName != null) return contributedName
 
-        var currentDescriptor = descriptor
-        while (currentDescriptor !is PackageFragmentDescriptor) {
-            currentDescriptor = currentDescriptor.containingDeclaration!!
+        return if (descriptor is PackageFragmentDescriptor) {
+            val fqnSequence = descriptor.fqNameUnsafe.pathSegments().asSequence().map { it.asString() }
+            val moduleRef = pureFqn(getInternalName(descriptor.module), null)
+            fqnSequence.fold(moduleRef) { qualifier, name -> pureFqn(name, qualifier) }
         }
+        else {
+            return JsNameRef(getSuggestedName(descriptor), getExternalName(descriptor.containingDeclaration!!))
+        }
+    }
 
-        return JsNameRef(getSuggestedName(descriptor), getExternalName(descriptor.containingDeclaration!!))
+    private fun getNameForMemberFunction(function: FunctionDescriptor): String {
+        val overriddenFunction = generateSequence(function.original) { it.overriddenDescriptors.firstOrNull() }.last().original
+        return when (overriddenFunction) {
+            is PropertyGetterDescriptor -> "get_" + ManglingUtils.getSuggestedName(overriddenFunction.correspondingProperty)
+            is PropertySetterDescriptor -> "set_" + ManglingUtils.getSuggestedName(overriddenFunction.correspondingProperty)
+            else -> ManglingUtils.getSuggestedName(overriddenFunction)
+        }
     }
 
     private fun getInternalName(descriptor: DeclarationDescriptor): JsName {
@@ -668,11 +702,19 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                     }
                     else {
                         val jsReceiver = receiver?.render()
+                        val freeVariables = descriptorToFunction[this.function.original]?.let { getFreeVariables(it) }.orEmpty()
+                        val jsClosureArgs = freeVariables.map { it.getJsName().makeRef() }
                         val jsArgs = arguments.map { it.render() }.toTypedArray()
+                        fun withClosureArgs(expression: JsExpression) = if (jsClosureArgs.isNotEmpty()) {
+                            JsInvocation(expression, jsClosureArgs)
+                        }
+                        else {
+                            expression
+                        }
                         if (jsReceiver != null) {
                             val functionName = getNameForMemberFunction(function)
                             if (virtual) {
-                                JsInvocation(pureFqn(functionName, jsReceiver), *jsArgs)
+                                JsInvocation(withClosureArgs(pureFqn(functionName, jsReceiver)), *jsArgs)
                             }
                             else {
                                 val className = getInternalName(function.containingDeclaration)
@@ -682,17 +724,17 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                                 else {
                                     pureFqn(functionName, pureFqn("prototype", pureFqn(className, null)))
                                 }
-                                JsInvocation(pureFqn("call", methodRef), *(arrayOf(jsReceiver) + jsArgs))
+                                JsInvocation(pureFqn("call", withClosureArgs(methodRef)), *(arrayOf(jsReceiver) + jsArgs))
                             }
                         }
                         else {
-                            JsInvocation(pureFqn(getInternalName(function), null), *jsArgs)
+                            JsInvocation(withClosureArgs(pureFqn(getInternalName(function), null)), *jsArgs)
                         }
                     }
                 }
             }
             is JsirExpression.FunctionReference -> {
-                val freeVariables = getFreeVariables(pool.functions[this.function]!!)
+                val freeVariables = getFreeVariables(descriptorToFunction[this.function]!!)
                 val reference = pureFqn(getInternalName(function), null)
                 val result: JsExpression = if (freeVariables.isEmpty()) {
                     reference
@@ -778,15 +820,6 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             JsirBinaryOperation.COMPARE,
             JsirBinaryOperation.EQUALS_METHOD,
             JsirBinaryOperation.ARRAY_GET -> error("Can't express $this as binary operation in AST")
-        }
-
-        private fun getNameForMemberFunction(function: FunctionDescriptor): String {
-            val overriddenFunction = generateSequence(function.original) { it.overriddenDescriptors.firstOrNull() }.last().original
-            return when (overriddenFunction) {
-                is PropertyGetterDescriptor -> "get_" + ManglingUtils.getSuggestedName(overriddenFunction.correspondingProperty)
-                is PropertySetterDescriptor -> "set_" + ManglingUtils.getSuggestedName(overriddenFunction.correspondingProperty)
-                else -> ManglingUtils.getSuggestedName(overriddenFunction)
-            }
         }
 
         @JvmName("renderStatements")

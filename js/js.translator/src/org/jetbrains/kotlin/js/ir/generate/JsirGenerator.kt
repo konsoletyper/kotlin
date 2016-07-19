@@ -206,6 +206,18 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
 
     override fun visitClassOrObject(psi: KtClassOrObject, data: JsirContext): JsirExpression {
         val descriptor = BindingUtils.getDescriptorForElement(context.bindingContext, psi) as ClassDescriptor
+        generateClass(psi, descriptor)
+        return JsirExpression.Undefined
+    }
+
+    override fun visitObjectLiteralExpression(psi: KtObjectLiteralExpression, data: JsirContext?): JsirExpression {
+        val descriptor = BindingUtils.getDescriptorForElement(context.bindingContext, psi.objectDeclaration) as ClassDescriptor
+        generateClass(psi.objectDeclaration, descriptor)
+        val constructor = context.bindingContext[BindingContext.CONSTRUCTOR, psi.objectDeclaration]!!
+        return JsirExpression.NewInstance(constructor)
+    }
+
+    private fun generateClass(psi: KtClassOrObject, descriptor: ClassDescriptor) {
         val cls = JsirClass(descriptor)
         val outerParameter = if (descriptor.isInner) JsirVariable("\$outer") else null
         context.pool.classes[cls.declaration] = cls
@@ -216,7 +228,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
 
             val primaryConstructorPsi = psi.getPrimaryConstructor()
             if (primaryConstructorPsi != null) {
-                primaryConstructorPsi.accept(this, data)
+                primaryConstructorPsi.accept(this, context)
             }
             else {
                 val constructorDescriptor = context.bindingContext[BindingContext.CONSTRUCTOR, psi]
@@ -230,12 +242,10 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             val bodyPsi = psi.getBody()
             if (bodyPsi != null) {
                 for (declaration in bodyPsi.declarations) {
-                    declaration.accept(this, data)
+                    declaration.accept(this, context)
                 }
             }
         }
-
-        return JsirExpression.Undefined
     }
 
     override fun visitCallExpression(expression: KtCallExpression, data: JsirContext?): JsirExpression {
@@ -244,11 +254,8 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         val qualifier = if (callee is KtDotQualifiedExpression) {
             callee.receiverExpression
         }
-        else if (resolvedCall is VariableAsFunctionResolvedCall) {
-            callee
-        }
         else {
-            null
+            callee
         }
 
         return context.generateInvocation(resolvedCall, context.defaultReceiverFactory(qualifier))

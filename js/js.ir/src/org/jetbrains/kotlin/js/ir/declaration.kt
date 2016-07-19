@@ -56,3 +56,7 @@ class JsirPool(val module: ModuleDescriptor) : JsirContainer {
 
     override val initializerBody = mutableListOf<JsirStatement>()
 }
+
+class JsirVariable(val suggestedName: String? = null)
+
+fun JsirVariable.makeReference() = JsirExpression.VariableReference(this, false)

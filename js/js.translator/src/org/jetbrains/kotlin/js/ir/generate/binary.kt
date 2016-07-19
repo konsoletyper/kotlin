@@ -45,6 +45,10 @@ internal fun JsirContext.generateBinary(expression: KtBinaryExpression): JsirExp
         operation == KtTokens.OROR -> generateLogical(expression, true)
         operation == KtTokens.IN_KEYWORD -> generateIn(expression)
         operation == KtTokens.NOT_IN -> generateIn(expression).negate()
+        operation == KtTokens.EQEQEQ -> JsirExpression.Binary(JsirBinaryOperation.REF_EQ, JsirType.ANY, generate (expression.left!!),
+                                                              generate(expression.right!!))
+        operation == KtTokens.EXCLEQEQEQ -> JsirExpression.Binary(JsirBinaryOperation.REF_NE, JsirType.ANY, generate (expression.left!!),
+                                                                  generate(expression.right!!))
         else -> generateInvocation(expression.getResolvedCall(bindingContext)!!, receiverFactory)
     }
 }
