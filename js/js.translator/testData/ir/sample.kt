@@ -37,6 +37,9 @@ fun test(x: Int): Int {
 }
 
 fun box(): String {
+    var x = 0
+    println(x++)
+
     println(A(10).Inner(20).foo())
     println(A(10).Inner2().foo())
 

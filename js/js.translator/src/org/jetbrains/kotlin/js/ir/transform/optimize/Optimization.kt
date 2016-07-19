@@ -16,10 +16,10 @@
 
 package org.jetbrains.kotlin.js.ir.transform.optimize
 
-import org.jetbrains.kotlin.js.ir.JsirFunction
 import org.jetbrains.kotlin.js.ir.JsirStatement
 import org.jetbrains.kotlin.js.ir.JsirVariable
+import kotlin.reflect.KClass
 
 interface Optimization {
-    fun apply(parameters: List<JsirVariable>, body: MutableList<JsirStatement>): List<Optimization>
+    fun apply(parameters: List<JsirVariable>, body: MutableList<JsirStatement>): List<KClass<out Optimization>>
 }
