@@ -17,23 +17,64 @@
 package org.jetbrains.kotlin.js.ir.transform
 
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.ConstructorDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.ir.*
 
 class ClassClosureTransformation {
     fun apply(pool: JsirPool) {
+        val closureFields = mutableMapOf<ClassDescriptor, Set<JsirVariable>>()
         for (cls in pool.classes.values) {
             val descriptor = cls.declaration
             if (descriptor.containingDeclaration !is FunctionDescriptor) continue
             val transformation = SingleClassClosureTransformation(pool, cls)
             transformation.apply(cls)
+            transformation.addClosureFields()
+            closureFields[descriptor] = transformation.closureFields
         }
+        applyToCallSites(closureFields, pool)
+    }
+
+    fun applyToCallSites(closureFields: Map<ClassDescriptor, Set<JsirVariable>>, pool: JsirPool) {
+        for (function in (pool.functions.values + pool.classes.values.flatMap { it.functions.values })) {
+            applyToCallSites(closureFields, function.parameters.flatMap { it.defaultBody })
+            applyToCallSites(closureFields, function.body)
+        }
+        for (cls in pool.classes.values) {
+            applyToCallSites(closureFields, cls.initializerBody)
+        }
+        applyToCallSites(closureFields, pool.initializerBody)
+    }
+
+    fun applyToCallSites(closureFields: Map<ClassDescriptor, Set<JsirVariable>>, statements: List<JsirStatement>) {
+        statements.visit(object : JsirVisitor<Unit, Unit> {
+            override fun accept(statement: JsirStatement, inner: () -> Unit) = inner()
+
+            override fun accept(expression: JsirExpression, inner: () -> Unit) {
+                when (expression) {
+                    is JsirExpression.Invocation -> applyToCallSite(closureFields, expression.function, expression.arguments)
+                    is JsirExpression.NewInstance -> applyToCallSite(closureFields, expression.constructor, expression.arguments)
+                }
+                inner()
+            }
+        })
+    }
+
+    private fun applyToCallSite(
+            closureFields: Map<ClassDescriptor, Set<JsirVariable>>,
+            function: FunctionDescriptor, arguments: MutableList<JsirExpression>
+    ) {
+        if (function !is ConstructorDescriptor) return
+
+        val fields = closureFields[function.containingDeclaration] ?: return
+        arguments.addAll(0, fields.map { JsirExpression.VariableReference(it, false) })
     }
 }
 
 private class SingleClassClosureTransformation(val pool: JsirPool, val root: JsirClass) : JsirMapper {
     private var currentClass: JsirClass = root
     private var currentFunction: JsirFunction? = null
+    val closureFields = mutableSetOf<JsirVariable>()
 
     fun apply(cls: JsirClass) = process(cls) {
         currentClass = cls
@@ -43,6 +84,24 @@ private class SingleClassClosureTransformation(val pool: JsirPool, val root: Jsi
             currentFunction = function
             function.parameters.forEach { it.defaultBody.replace(this) }
             function.body.replace(this)
+        }
+    }
+
+    fun addClosureFields() {
+        root.closureFields += closureFields
+        for (constructorDescriptor in root.declaration.constructors) {
+            val constructor = root.functions[constructorDescriptor] ?: continue
+            val statements = mutableListOf<JsirStatement>()
+            val parameters = mutableListOf<JsirParameter>()
+            for (closureField in closureFields) {
+                val parameter = JsirVariable(closureField.suggestedName)
+                val reference = JsirExpression.FieldAccess(JsirExpression.This, JsirField.Closure(closureField))
+                statements += JsirStatement.Assignment(reference, parameter.makeReference())
+                parameters += JsirParameter(parameter)
+            }
+
+            constructor.parameters.addAll(0, parameters)
+            constructor.body.addAll(0, statements)
         }
     }
 
@@ -60,6 +119,7 @@ private class SingleClassClosureTransformation(val pool: JsirPool, val root: Jsi
 
     override fun map(expression: JsirExpression): JsirExpression {
         return if (expression is JsirExpression.VariableReference && expression.free) {
+            closureFields += expression.variable
             JsirExpression.FieldAccess(getReceiver(), JsirField.Closure(expression.variable))
         }
         else {
