@@ -26,15 +26,9 @@ import org.jetbrains.kotlin.types.KotlinType
 sealed class JsirExpression {
     var source: PsiElement? = null
 
-    class Constant(var value: Any) : JsirExpression()
-
-    object Null : JsirExpression()
+    class Constant(var value: Any?) : JsirExpression()
 
     object This : JsirExpression()
-
-    object True : JsirExpression()
-
-    object False : JsirExpression()
 
     object Undefined : JsirExpression()
 

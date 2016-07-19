@@ -20,10 +20,7 @@ import org.jetbrains.kotlin.js.ir.*
 import org.jetbrains.kotlin.psi.KtExpression
 
 fun JsirContext.memoize(expression: JsirExpression) = when (expression) {
-    is JsirExpression.Null,
     is JsirExpression.This,
-    is JsirExpression.True,
-    is JsirExpression.False,
     is JsirExpression.VariableReference,
     is JsirExpression.Undefined,
     is JsirExpression.Constant -> expression
@@ -38,16 +35,15 @@ fun JsirContext.memoize(expression: JsirExpression) = when (expression) {
 fun JsirContext.memoize(expression: KtExpression) = withSource(expression) { memoize(generate(expression)) }
 
 fun JsirExpression.nullCheck() = when (this) {
-    is JsirExpression.Null -> JsirExpression.True
-
     is JsirExpression.This,
-    is JsirExpression.True,
-    is JsirExpression.False,
     is JsirExpression.Undefined,
-    is JsirExpression.FunctionReference,
-    is JsirExpression.Constant -> JsirExpression.False
+    is JsirExpression.FunctionReference -> JsirExpression.Constant(false)
+    is JsirExpression.Constant -> JsirExpression.Constant(when (value) {
+        null -> true
+        else -> false
+    })
 
-    else -> JsirExpression.Binary(JsirBinaryOperation.REF_EQ, JsirType.ANY, this, JsirExpression.Null)
+    else -> JsirExpression.Binary(JsirBinaryOperation.REF_EQ, JsirType.ANY, this, JsirExpression.Constant(null))
 }
 
 fun JsirContext.assign(left: JsirExpression, right: JsirExpression) {
@@ -56,10 +52,7 @@ fun JsirContext.assign(left: JsirExpression, right: JsirExpression) {
 
 fun JsirContext.append(expression: JsirExpression) {
     when (expression) {
-        is JsirExpression.Null,
         is JsirExpression.Undefined,
-        is JsirExpression.True,
-        is JsirExpression.False,
         is JsirExpression.Constant,
         is JsirExpression.This,
         is JsirExpression.FunctionReference,
@@ -73,8 +66,13 @@ fun JsirExpression.negate(): JsirExpression = when (this) {
         JsirUnaryOperation.NEGATION -> operand
         else -> negateDefault()
     }
-    is JsirExpression.True -> JsirExpression.False
-    is JsirExpression.False -> JsirExpression.True
+    is JsirExpression.Constant -> {
+        val value = this.value
+        when (value) {
+            is Boolean -> JsirExpression.Constant(!value)
+            else -> negateDefault()
+        }
+    }
     is JsirExpression.Binary -> {
         val negatedOperation = operation.negate()
         if (negatedOperation != null) {

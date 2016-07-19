@@ -57,7 +57,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                                error("Expression is not compile time value: " + expression.getTextWithLocation() + " ")
         val expectedType = context.bindingContext.getType(expression)
         val constant = compileTimeValue.toConstantValue(expectedType ?: TypeUtils.NO_EXPECTED_TYPE)
-        if (constant is NullValue) return JsirExpression.Null
+        if (constant is NullValue) return JsirExpression.Constant(null)
 
         return JsirExpression.Constant(constant.value!!)
     }
@@ -356,7 +356,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     override fun visitWhileExpression(expression: KtWhileExpression, data: JsirContext?) = generateWhile(expression, null)
 
     private fun generateWhile(expression: KtWhileExpression, label: String?): JsirExpression {
-        val statement = JsirStatement.While(JsirExpression.True)
+        val statement = JsirStatement.While(JsirExpression.Constant(true))
         context.nestedLabel(label, statement, true, true) {
             context.nestedBlock(statement.body) {
                 context.withSource(expression.condition) {
@@ -378,7 +378,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     override fun visitDoWhileExpression(expression: KtDoWhileExpression, data: JsirContext) = generateDoWhile(expression, null)
 
     private fun generateDoWhile(expression: KtDoWhileExpression, label: String?): JsirExpression {
-        val statement = JsirStatement.DoWhile(JsirExpression.True)
+        val statement = JsirStatement.DoWhile(JsirExpression.Constant(true))
         context.nestedLabel(label, statement, true, true) {
             context.nestedBlock(statement.body) {
                 val block = JsirStatement.Block()
@@ -474,7 +474,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             context.assign(result, generateQualified(expression) { receiver })
         }
         context.nestedBlock(conditional.elseBody) {
-            context.assign(result, JsirExpression.Null)
+            context.assign(result, JsirExpression.Constant(null))
         }
         context.append(conditional)
         return result

@@ -331,9 +331,6 @@ private class Implementation(val body: MutableList<JsirStatement>) {
                 is JsirExpression.ObjectReference -> true
                 is JsirExpression.FunctionReference -> true
 
-                is JsirExpression.True,
-                is JsirExpression.False,
-                is JsirExpression.Null,
                 is JsirExpression.Undefined,
                 is JsirExpression.This,
                 is JsirExpression.Constant -> false
@@ -366,8 +363,6 @@ private class Implementation(val body: MutableList<JsirStatement>) {
         }
         is JsirExpression.Constant -> expression.value.toString().length < 10
         is JsirExpression.This,
-        is JsirExpression.True,
-        is JsirExpression.False,
         is JsirExpression.Undefined -> true
         else -> false
     }

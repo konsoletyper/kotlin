@@ -37,7 +37,7 @@ internal fun JsirContext.generateBinary(expression: KtBinaryExpression): JsirExp
         operation == KtTokens.ELVIS -> generateElvis(expression.left!!, expression.right!!)
         isAssignmentOperator(operation) -> {
             generateAssignment(expression)
-            JsirExpression.Null
+            JsirExpression.Constant(null)
         }
         operationDescriptor != null && JsDescriptorUtils.isCompareTo(operationDescriptor) -> generateCompareTo(expression)
         operation == KtTokens.EXCLEQ -> generateInvocation(expression.getResolvedCall(bindingContext)!!, receiverFactory).negate()

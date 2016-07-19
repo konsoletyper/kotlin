@@ -121,10 +121,7 @@ fun <S, E> JsirExpression.visit(visitor: JsirVisitor<S, E>): E = visitor.accept(
     is JsirExpression.ObjectReference,
     is JsirExpression.Constant,
     is JsirExpression.This,
-    is JsirExpression.Null,
-    is JsirExpression.Undefined,
-    is JsirExpression.True,
-    is JsirExpression.False -> ({ })
+    is JsirExpression.Undefined -> ({ })
 })
 
 @JvmName("visitExpressions")
@@ -208,9 +205,6 @@ private fun JsirStatement.replace(mapper: JsirMapper, canChangeType: Boolean): J
 
 fun JsirExpression.replace(mapper: JsirMapper): JsirExpression = when (this) {
     is JsirExpression.Constant,
-    is JsirExpression.True,
-    is JsirExpression.False,
-    is JsirExpression.Null,
     is JsirExpression.Undefined,
     is JsirExpression.This,
     is JsirExpression.NewNullPointerExpression,

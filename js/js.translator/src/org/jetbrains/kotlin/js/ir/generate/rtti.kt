@@ -22,7 +22,7 @@ import org.jetbrains.kotlin.types.isDynamic
 import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
 
 internal fun JsirContext.generateInstanceOf(value: JsirExpression, sourceType: KotlinType?, targetType: KotlinType): JsirExpression {
-    if (sourceType != null && !sourceType.isDynamic() && sourceType.isSubtypeOf(targetType)) return JsirExpression.True
+    if (sourceType != null && !sourceType.isDynamic() && sourceType.isSubtypeOf(targetType)) return JsirExpression.Constant(true)
 
     return JsirExpression.InstanceOf(value, targetType)
 }

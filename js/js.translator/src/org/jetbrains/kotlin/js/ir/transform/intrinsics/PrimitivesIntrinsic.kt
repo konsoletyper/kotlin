@@ -56,13 +56,17 @@ class PrimitivesIntrinsic : Intrinsic {
         val type = getType(getClass(invocation.function).fqNameSafe.asString()) ?: return invocation
         val receiver = invocation.receiver!!
 
+        if (type == JsirType.ANY && functionName == "plus") {
+            return JsirExpression.Concat(receiver, invocation.arguments[0])
+        }
+
         return when (functionName) {
             "inc" -> JsirExpression.Binary(JsirBinaryOperation.ADD, type, receiver, JsirExpression.Constant(1))
             "dec" -> JsirExpression.Binary(JsirBinaryOperation.SUB, type, receiver, JsirExpression.Constant(1))
             "not" -> invocation.receiver!!.negate()
             "unaryMinus" -> JsirExpression.Unary(JsirUnaryOperation.MINUS, type, receiver)
             else -> {
-                operation(functionName)?.let {
+                operation( functionName)?.let {
                     JsirExpression.Binary(it, type, receiver, invocation.arguments[0])
                 } ?: invocation
             }

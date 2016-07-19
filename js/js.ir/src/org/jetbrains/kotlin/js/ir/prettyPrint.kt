@@ -245,15 +245,13 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
             is String -> {
                 "\"$value\""
             }
+            null -> "null"
             else -> value.toString()
         })
     }
 
     is JsirExpression.Undefined -> writer.constant("undefined")
-    is JsirExpression.Null -> writer.constant("null")
     is JsirExpression.This -> writer.constant("this")
-    is JsirExpression.True -> writer.constant("true")
-    is JsirExpression.False -> writer.constant("false")
     is JsirExpression.VariableReference -> writer.constant("(var ${writer.getVariable(variable)})")
     is JsirExpression.FunctionReference -> writer.constant("(function ${function.name.asString()})")
     is JsirExpression.ObjectReference -> writer.constant("(object ${descriptor.name.asString()})")

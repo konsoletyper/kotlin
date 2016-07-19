@@ -93,7 +93,7 @@ private fun JsirContext.generateWhenCondition(subject: JsirExpression?, subjectP
         }
     }
     is KtWhenConditionInRange -> {
-        JsirExpression.True
+        JsirExpression.Constant(true)
     }
     else -> error("Unsupported when condition ${psi.getTextWithLocation()}")
 }

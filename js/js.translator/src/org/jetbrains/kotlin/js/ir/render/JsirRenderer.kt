@@ -596,6 +596,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             is JsirExpression.Constant -> {
                 val value = this.value
                 when (value) {
+                    null -> JsLiteral.NULL
                     is String -> program.getStringLiteral(value)
                     is Byte -> program.getNumberLiteral(value.toInt())
                     is Short -> program.getNumberLiteral(value.toInt())
@@ -606,9 +607,6 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                     else -> error("Unexpected constant value $value")
                 }
             }
-            is JsirExpression.True -> JsLiteral.TRUE
-            is JsirExpression.False -> JsLiteral.FALSE
-            is JsirExpression.Null -> JsLiteral.NULL
             is JsirExpression.This -> JsLiteral.THIS
             is JsirExpression.Undefined -> JsPrefixOperation(JsUnaryOperator.VOID, program.getNumberLiteral(0))
 
