@@ -96,6 +96,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     val moduleNames = mutableListOf<String>()
     val freeVariablesByFunction: Map<JsirFunction, Set<JsirVariable>>
     val descriptorToFunction: Map<FunctionDescriptor, JsirFunction>
+    val delegateFieldNames = mutableMapOf<JsirField.Delegate, JsName>()
 
     init {
         val allFunctions = (pool.functions.values.asSequence() + pool.classes.values.asSequence()
@@ -167,6 +168,10 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         wrapperFunction.body.statements += jsConstructor.makeStmt()
         val renderer = StatementRenderer(jsConstructor)
 
+        for (delegateField in cls.delegateFields) {
+            delegateFieldNames[delegateField] = jsConstructor.scope.declareName("delegate\$${delegateField.suggestedName ?: ""}")
+        }
+
         val primaryConstructorDescriptor = cls.functions.values.asSequence()
                 .map { it.declaration }
                 .firstOrNull { it is ConstructorDescriptor && it.isPrimary }
@@ -206,6 +211,8 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             val lhs = JsNameRef(getNameForMemberFunction(function.declaration), makePrototype(constructorName))
             wrapperFunction.body.statements += JsAstUtils.assignment(lhs, renderFunction(function)).makeStmt()
         }
+
+        delegateFieldNames.clear()
     }
 
     private fun makePrototype(name: JsName) = JsNameRef("prototype", name.makeRef())
@@ -769,12 +776,15 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                         }
                     }
                     is JsirField.OuterClass -> {
-                        JsNameRef("\$outer", receiver!!.render()).apply {
+                        JsNameRef("\$outer${getSuggestedName(field.classDescriptor)}", receiver!!.render()).apply {
                             sideEffects = SideEffectKind.DEPENDS_ON_STATE
                         }
                     }
                     is JsirField.Closure -> {
                         JsNameRef("closure\$${field.variable.suggestedName}", receiver!!.render())
+                    }
+                    is JsirField.Delegate -> {
+                        JsNameRef(delegateFieldNames[field]!!, receiver!!.render())
                     }
                 }
             }

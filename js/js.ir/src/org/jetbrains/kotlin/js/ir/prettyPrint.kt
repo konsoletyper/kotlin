@@ -260,7 +260,8 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
 private fun JsirField.prettyPrint(writer: SourceWriter) = when (this) {
     is JsirField.Backing -> property.name.toString()
     is JsirField.OuterClass -> "\$outer"
-    is JsirField.Closure -> "closure${writer.getVariable(variable)}"
+    is JsirField.Closure -> "closure\$${writer.getVariable(variable)}"
+    is JsirField.Delegate -> "delegate\$${suggestedName ?: "anonymous"}"
 }
 
 private fun JsirBinaryOperation.getSymbol() = when (this) {

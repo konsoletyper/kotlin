@@ -139,5 +139,7 @@ sealed class JsirField {
     class OuterClass(val classDescriptor: ClassDescriptor) : JsirField()
 
     class Closure(val variable: JsirVariable) : JsirField()
+
+    class Delegate(val suggestedName: String?) : JsirField()
 }
 

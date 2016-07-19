@@ -220,6 +220,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         val cls = JsirClass(descriptor)
         val outerParameter = if (descriptor.isInner) JsirVariable("\$outer") else null
         context.pool.classes[cls.declaration] = cls
+        val delegationGenerator = DelegationGenerator(context, psi, cls)
         context.nestedClass(cls, outerParameter) {
             if (outerParameter != null && !(descriptor.getSuperClassNotAny()?.isInner ?: false)) {
                 cls.hasOuterProperty = true
@@ -238,11 +239,15 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                 }
 
                 if (primaryConstructorPsi != null) {
+                    context.nestedBlock(cls.initializerBody) {
+                        delegationGenerator.contributeToInitializer()
+                    }
                     primaryConstructorPsi.accept(this, context)
                 }
                 else if (constructorDescriptor != null) {
                     context.nestedBlock(cls.initializerBody) {
                         synthesizeSuperCall(constructorDescriptor)
+                        delegationGenerator.contributeToInitializer()
                     }
                 }
 
@@ -252,6 +257,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                         declaration.accept(this, context)
                     }
                 }
+                delegationGenerator.generateMembers()
             }
         }
     }

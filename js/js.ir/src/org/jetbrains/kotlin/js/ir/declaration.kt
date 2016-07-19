@@ -45,6 +45,8 @@ class JsirClass(val declaration: ClassDescriptor) : JsirContainer {
     var hasOuterProperty = false
 
     val closureFields = mutableSetOf<JsirVariable>()
+
+    val delegateFields = mutableSetOf<JsirField.Delegate>()
 }
 
 class JsirPool(val module: ModuleDescriptor) : JsirContainer {
