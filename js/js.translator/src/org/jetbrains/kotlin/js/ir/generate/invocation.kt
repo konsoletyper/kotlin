@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.js.ir.generate
 
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.impl.SyntheticFieldDescriptor
 import org.jetbrains.kotlin.js.ir.JsirExpression
 import org.jetbrains.kotlin.js.ir.JsirField
 import org.jetbrains.kotlin.js.ir.makeReference
@@ -51,7 +52,7 @@ internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, argum
     val descriptor = resolvedCall.resultingDescriptor
 
     if (descriptor is VariableDescriptor && descriptor.containingDeclaration is FunctionDescriptor) {
-        return getVariable(descriptor).get()
+        return generateVariable(resolvedCall, receiverFactory).get()
     }
 
     if (descriptor is ConstructorDescriptor) {
@@ -113,7 +114,7 @@ internal fun JsirContext.generateVariable(psi: KtExpression): VariableAccessor {
 internal fun JsirContext.generateVariable(resolvedCall: ResolvedCall<*>, receiverFactory: (() -> JsirExpression)?): VariableAccessor {
     val descriptor = resolvedCall.resultingDescriptor
     if (descriptor is VariableDescriptor && descriptor.containingDeclaration is FunctionDescriptor) {
-        return getVariable(descriptor)
+        return if (descriptor is SyntheticFieldDescriptor) generateBackingField(descriptor) else getVariable(descriptor)
     }
 
     if (descriptor !is VariableDescriptorWithAccessors) error("Non-local variable should have accessors: $descriptor")
@@ -136,6 +137,19 @@ internal fun JsirContext.generateVariable(resolvedCall: ResolvedCall<*>, receive
         private fun requiresBackingFieldAccess(): Boolean {
             return (declaration is ConstructorDescriptor || declaration is ClassDescriptor) &&
                    classDescriptor == descriptor.containingDeclaration
+        }
+    }
+}
+
+private fun JsirContext.generateBackingField(descriptor: SyntheticFieldDescriptor): VariableAccessor {
+    val property = descriptor.propertyDescriptor
+    val receiver = if (property.containingDeclaration is ClassDescriptor) JsirExpression.This else null
+    val fieldAccess = JsirExpression.FieldAccess(receiver, JsirField.Backing(descriptor.propertyDescriptor))
+    return object : VariableAccessor {
+        override fun get() = fieldAccess
+
+        override fun set(value: JsirExpression) {
+            assign(fieldAccess, value)
         }
     }
 }

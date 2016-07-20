@@ -31,10 +31,8 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.psiUtil.getTextWithLocation
 import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
-import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassNotAny
-import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyPublicApi
-import org.jetbrains.kotlin.resolve.descriptorUtil.module
+import org.jetbrains.kotlin.resolve.descriptorUtil.*
+import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.utils.singletonOrEmptyList
 
 class JsirRenderer {
@@ -196,6 +194,8 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             wrapperFunction.body.statements += JsAstUtils.assignment(JsNameRef("constructor", makePrototype(constructorName)),
                                                                      constructorName.makeRef()).makeStmt()
         }
+        renderInterfaceDefaultMethods(cls)
+
         if (descriptor.kind == ClassKind.OBJECT) {
             val instanceRef = JsNameRef("instance", constructorName.makeRef())
             val instance = JsNew(constructorName.makeRef())
@@ -213,6 +213,36 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         }
 
         delegateFieldNames.clear()
+    }
+
+    fun renderInterfaceDefaultMethods(cls: JsirClass) {
+        val descriptor = cls.declaration
+        val members = descriptor.unsubstitutedMemberScope.getContributedDescriptors(DescriptorKindFilter.CALLABLES)
+                .asSequence()
+                .filterIsInstance<CallableMemberDescriptor>()
+                .filter { it.kind == CallableMemberDescriptor.Kind.FAKE_OVERRIDE }
+
+        val functions = members.flatMap { member ->
+            when (member) {
+                is FunctionDescriptor -> sequenceOf(member)
+                is VariableDescriptorWithAccessors -> sequenceOf(member.getter, member.setter).filterNotNull()
+                else -> emptySequence()
+            }
+        }
+
+        val constructorName = getInternalName(descriptor)
+        for (function in functions) {
+            val overriddenFunction = function.overriddenDescriptors.first()
+            val overriddenClass = overriddenFunction.containingDeclaration as ClassDescriptor
+            if (overriddenClass.kind != ClassKind.INTERFACE) continue
+
+            val thisPrototype = makePrototype(constructorName)
+            val overriddenPrototype = makePrototype(getInternalName(overriddenClass))
+            val simpleName = getNameForMemberFunction(function)
+            wrapperFunction.body.statements += JsAstUtils.assignment(
+                    JsNameRef(simpleName, thisPrototype),
+                    JsNameRef(simpleName, overriddenPrototype)).makeStmt()
+        }
     }
 
     private fun makePrototype(name: JsName) = JsNameRef("prototype", name.makeRef())

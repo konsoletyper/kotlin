@@ -141,7 +141,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             is KtDoWhileExpression -> generateDoWhile(body, label)
             is KtWhileExpression -> generateWhile(body, label)
             is KtBlockExpression -> generateBlockExpression(body, label)
-            else -> super.visitLabeledExpression(expression, data)
+            else -> context.generate(body)
         }
     }
 
@@ -579,8 +579,8 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             }
             for (parameterDescriptor in descriptor.valueParameters) {
                 val parameter = JsirParameter(context.getVariable(parameterDescriptor).localVariable)
-                val parameterPsi = functionPsi.valueParameters[parameterDescriptor.index]
-                val defaultValuePsi = parameterPsi.defaultValue
+                val parameterPsi = functionPsi.valueParameters.getOrNull(parameterDescriptor.index)
+                val defaultValuePsi = parameterPsi?.defaultValue
                 if (defaultValuePsi != null) {
                     context.nestedBlock(parameter.defaultBody) {
                         context.assign(parameter.variable.makeReference(), context.generate(defaultValuePsi))

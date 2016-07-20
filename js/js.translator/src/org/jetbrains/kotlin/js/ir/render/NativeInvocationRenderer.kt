@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.ir.JsirExpression
 import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
+import org.jetbrains.kotlin.js.translate.utils.ManglingUtils
 
 class NativeInvocationRenderer() : InvocationRenderer {
     override fun isApplicable(descriptor: FunctionDescriptor): Boolean {
@@ -35,11 +36,13 @@ class NativeInvocationRenderer() : InvocationRenderer {
 
     override fun render(invocation: JsirExpression.Invocation, context: JsirRenderingContext): JsExpression {
         val receiver = invocation.receiver?.let { context.renderExpression(it) }
-        val function = invocation.function
+        val function = invocation.function.original
+
         if (function is VariableAccessorDescriptor) {
             val property = function.correspondingVariable
             val qualifier = receiver ?: (property.containingDeclaration as? ClassDescriptor)?.jsExpression(context)
-            val reference = JsNameRef(property.name.asString(), qualifier)
+            val name = property.getJsName()
+            val reference = JsNameRef(name, qualifier)
             return if (property.getter == function) {
                 reference
             }
@@ -73,10 +76,10 @@ class NativeInvocationRenderer() : InvocationRenderer {
         }
         else if (invocation.virtual) {
             if (!renderVararg) {
-                JsInvocation(JsNameRef(function.name.asString(), receiver), arguments)
+                JsInvocation(JsNameRef(function.getJsName(), receiver), arguments)
             }
             else {
-                createInvocation(JsNameRef(function.name.asString(), receiver), receiver, arguments)
+                createInvocation(JsNameRef(function.getJsName(), receiver), receiver, arguments)
             }
         }
         else {
@@ -89,11 +92,22 @@ class NativeInvocationRenderer() : InvocationRenderer {
         }
     }
 
+    private fun DeclarationDescriptor.getSimpleJsName(): String {
+        return if (AnnotationsUtils.isNativeObject(this)) {
+            name.asString()
+        }
+        else {
+            ManglingUtils.getSuggestedName(this)
+        }
+    }
+
+    private fun DeclarationDescriptor.getJsName() = AnnotationsUtils.getNameForAnnotatedObjectWithOverrides(this) ?: getSimpleJsName()
+
     private fun DeclarationDescriptor.jsExpression(context: JsirRenderingContext): JsExpression {
         val cls = containingDeclaration as? ClassDescriptor
         val root = if (AnnotationsUtils.isLibraryObject(this)) context.kotlinName().makeRef() else null
         val qualifier = cls?.let { JsNameRef(cls.name.asString(), root) } ?: root
-        return JsNameRef(name.asString(), qualifier)
+        return JsNameRef(getJsName(), qualifier)
     }
 
     private fun createInvocation(function: JsExpression, receiver: JsExpression, arguments: List<JsExpression>): JsInvocation {
