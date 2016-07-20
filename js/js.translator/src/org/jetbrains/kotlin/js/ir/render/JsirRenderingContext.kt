@@ -16,22 +16,34 @@
 
 package org.jetbrains.kotlin.js.ir.render
 
-import com.google.dart.compiler.backend.js.ast.JsExpression
-import com.google.dart.compiler.backend.js.ast.JsName
-import com.google.dart.compiler.backend.js.ast.JsScope
-import com.google.dart.compiler.backend.js.ast.JsStringLiteral
+import com.google.dart.compiler.backend.js.ast.*
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.js.ir.JsirExpression
+import org.jetbrains.kotlin.js.ir.*
 
 interface JsirRenderingContext {
     val scope: JsScope
 
     val module: ModuleDescriptor
 
-    fun renderExpression(expression: JsirExpression): JsExpression
+    fun render(expression: JsirExpression): JsExpression
+
+    fun render(statement: JsirStatement): List<JsStatement>
 
     fun getInternalName(descriptor: DeclarationDescriptor): JsName
 
+    fun getInternalName(field: JsirField): JsName
+
     fun getStringLiteral(value: String): JsStringLiteral
+
+    fun getNumberLiteral(value: Int): JsNumberLiteral
+
+    fun getNumberLiteral(value: Double): JsNumberLiteral
+
+    fun getInvocationRenderer(function: FunctionDescriptor): InvocationRenderer?
+
+    fun getFreeVariables(function: JsirFunction): Set<JsirVariable>
+
+    fun lookupFunction(descriptor: FunctionDescriptor): JsirFunction?
 }

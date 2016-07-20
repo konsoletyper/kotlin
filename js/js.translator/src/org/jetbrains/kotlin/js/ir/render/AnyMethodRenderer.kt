@@ -31,8 +31,8 @@ abstract class AnyMethodRenderer : InvocationRenderer {
     protected abstract fun matchNameAndArgumentCount(name: String, argumentCount: Int): Boolean
 
     override fun render(invocation: JsirExpression.Invocation, context: JsirRenderingContext): JsExpression {
-        val receiver = context.renderExpression(invocation.receiver!!)
-        val arguments = invocation.arguments.map { context.renderExpression(it) }
+        val receiver = context.render(invocation.receiver!!)
+        val arguments = invocation.arguments.map { context.render(it) }
         return render(context, receiver, arguments)
     }
 

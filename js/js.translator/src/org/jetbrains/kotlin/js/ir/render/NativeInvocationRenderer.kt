@@ -35,7 +35,7 @@ class NativeInvocationRenderer() : InvocationRenderer {
     }
 
     override fun render(invocation: JsirExpression.Invocation, context: JsirRenderingContext): JsExpression {
-        val receiver = invocation.receiver?.let { context.renderExpression(it) }
+        val receiver = invocation.receiver?.let { context.render(it) }
         val function = invocation.function.original
 
         if (function is VariableAccessorDescriptor) {
@@ -47,22 +47,22 @@ class NativeInvocationRenderer() : InvocationRenderer {
                 reference
             }
             else {
-                JsAstUtils.assignment(reference, context.renderExpression(invocation.arguments[0]))
+                JsAstUtils.assignment(reference, context.render(invocation.arguments[0]))
             }
         }
 
         val lastParameter = function.valueParameters.lastOrNull()
         val varArg = lastParameter?.varargElementType != null
         val (arguments, renderVararg) = if (!varArg) {
-            Pair(invocation.arguments.map { context.renderExpression(it) }, false)
+            Pair(invocation.arguments.map { context.render(it) }, false)
         }
         else {
             val lastArgument = invocation.arguments.last()
             if (lastArgument is JsirExpression.ArrayOf) {
-                Pair((invocation.arguments.dropLast(1) + lastArgument.elements).map { context.renderExpression(it) }, false)
+                Pair((invocation.arguments.dropLast(1) + lastArgument.elements).map { context.render(it) }, false)
             }
             else {
-                Pair(invocation.arguments.map { context.renderExpression(it) }, true)
+                Pair(invocation.arguments.map { context.render(it) }, true)
             }
         }
 

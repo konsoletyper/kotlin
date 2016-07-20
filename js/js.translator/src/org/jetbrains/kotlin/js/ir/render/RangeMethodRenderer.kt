@@ -39,7 +39,7 @@ class RangeMethodRenderer() : InvocationRenderer {
             "kotlin.Long" -> "LongRange"
             else -> throw UnsupportedOperationException("Unsupported class: $className")
         }
-        val arguments = listOf(context.renderExpression(invocation.receiver!!), context.renderExpression(invocation.arguments[0]))
+        val arguments = listOf(context.render(invocation.receiver!!), context.render(invocation.arguments[0]))
         return JsNew(context.kotlinReference(constructor), arguments)
     }
 }
