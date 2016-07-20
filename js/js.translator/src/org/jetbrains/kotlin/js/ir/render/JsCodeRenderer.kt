@@ -44,7 +44,7 @@ fun JsirRenderingContext.renderJsCode(expression: JsirExpression.Invocation): Pa
 private fun JsirRenderingContext.parseJsCode(codeExpression: JsirExpression): List<JsStatement> {
     val jsCode = extractStringValue(codeExpression) ?: error("jsCode must be compile time string " + codeExpression.prettyPrint())
 
-    val scope = DelegatingJsFunctionScopeWithTemporaryParent(this.scope as JsFunctionScope, JsRootScope(JsProgram("<js code>")))
+    val scope = DelegatingJsFunctionScopeWithTemporaryParent(JsFunctionScope(this.scope, ""), JsRootScope(JsProgram("<js code>")))
     return parse(jsCode, ThrowExceptionOnErrorReporter, scope)
 }
 

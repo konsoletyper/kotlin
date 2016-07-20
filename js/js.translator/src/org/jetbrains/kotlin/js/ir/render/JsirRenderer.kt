@@ -97,7 +97,8 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     val delegateFieldNames = mutableMapOf<JsirField.Delegate, JsName>()
     val outerFieldNames = mutableMapOf<ClassDescriptor, JsName>()
     val closureFieldNames = mutableMapOf<JsirVariable, JsName>()
-    val globalContext = Context(wrapperFunction)
+    val rootNamespace = Namespace()
+    val globalContext = Context(wrapperFunction, rootNamespace)
 
     init {
         val allFunctions = (pool.functions.values.asSequence() + pool.classes.values.asSequence()
@@ -142,7 +143,14 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         }
 
         for (statement in pool.initializerBody) {
+            val initializerStart = wrapperFunction.body.statements.size
             wrapperFunction.body.statements += globalContext.render(statement)
+            val declaredVariables = globalContext.variableNames.keys
+            if (declaredVariables.isNotEmpty()) {
+                val declarations = JsVars(*declaredVariables.map { JsVars.JsVar(globalContext.variableNames[it]!!) }.toTypedArray())
+                        .apply { synthetic = true }
+                wrapperFunction.body.statements.add(initializerStart, declarations)
+            }
         }
 
         wrapperFunction.body.statements.addAll(0, importsSection)
@@ -166,18 +174,18 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         val jsConstructor = JsFunction(wrapperFunction.scope, JsBlock(), descriptor.toString())
         jsConstructor.name = constructorName
         wrapperFunction.body.statements += jsConstructor.makeStmt()
-        val context = Context(jsConstructor)
+        val context = Context(jsConstructor, Namespace(rootNamespace))
 
         if (descriptor.isInner) {
-            outerFieldNames[cls.declaration] = jsConstructor.scope.declareName("outer\$${getSuggestedName(descriptor)}")
+            outerFieldNames[cls.declaration] = program.scope.declareName("outer\$${getSuggestedName(descriptor)}")
         }
 
         for (delegateField in cls.delegateFields) {
-            delegateFieldNames[delegateField] = jsConstructor.scope.declareName("delegate\$${delegateField.suggestedName ?: ""}")
+            delegateFieldNames[delegateField] = program.scope.declareName("delegate\$${delegateField.suggestedName ?: ""}")
         }
 
         for (field in cls.closureFields) {
-            closureFieldNames[field] = jsConstructor.scope.declareFreshName("closure\$${field.suggestedName ?: "tmp"}")
+            closureFieldNames[field] = program.scope.declareName("closure\$${field.suggestedName ?: "tmp"}")
         }
 
         val primaryConstructorDescriptor = cls.functions.values.asSequence()
@@ -262,21 +270,22 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     fun renderFunction(function: JsirFunction): JsFunction {
         val freeVariables = getFreeVariables(function)
 
+        val context = Context(JsFunction(wrapperFunction.scope, JsBlock(), function.declaration.toString()), Namespace(rootNamespace))
         val result = if (freeVariables.isEmpty()) {
-            renderRawFunction(function, wrapperFunction.scope, emptyMap())
+            renderRawFunction(function, wrapperFunction.scope, emptyMap(), context)
         }
         else {
             val constructor = JsFunction(wrapperFunction.scope, JsBlock(), "closure constructor: ${function.declaration}")
             val freeVariableNames = mutableMapOf<JsirVariable, JsName>()
             for (freeVariable in freeVariables) {
                 val suggestedName = freeVariable.suggestedName ?: "closure\$tmp"
-                val name = constructor.scope.declareFreshName(suggestedName)
+                val name = program.scope.declareName(context.namespace.generateFreshName(suggestedName))
                 freeVariableNames[freeVariable] = name
                 constructor.parameters += JsParameter(name)
             }
 
-            val boundFunction = JsInvocation(JsNameRef("bind", renderRawFunction(function, constructor.scope, freeVariableNames)),
-                                             JsLiteral.THIS)
+            val rawFunction = renderRawFunction(function, constructor.scope, freeVariableNames, context)
+            val boundFunction = JsInvocation(JsNameRef("bind", rawFunction), JsLiteral.THIS)
             constructor.body.statements += JsReturn(boundFunction)
             constructor
         }
@@ -286,10 +295,10 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
 
     fun renderRawFunction(
             function: JsirFunction, scope: JsScope, freeVariables: Map<JsirVariable, JsName>,
-            context: Context = Context(JsFunction(scope, JsBlock(), function.declaration.toString()))
+            context: Context = Context(JsFunction(scope, JsBlock(), function.declaration.toString()), Namespace(rootNamespace))
     ): JsFunction {
         val jsFunction = context.jsFunction
-        context.renderer.variableNames += freeVariables
+        context.variableNames += freeVariables
 
         renderRawFunctionBody(function, context)
         renderVariableDeclarations(context, function.parameters.map { it.variable } + freeVariables.keys)
@@ -300,7 +309,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     fun renderRawFunctionBody(function: JsirFunction, context: Context) {
         val jsFunction = context.jsFunction
         for (parameter in function.parameters) {
-            val parameterName = context.renderer.getJsNameFor(parameter.variable)
+            val parameterName = context.getInternalName(parameter.variable)
             jsFunction.parameters += JsParameter(parameterName)
             if (parameter.defaultBody.isNotEmpty()) {
                 val undefined = JsPrefixOperation(JsUnaryOperator.VOID, program.getNumberLiteral(0))
@@ -315,9 +324,9 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     }
 
     private fun renderVariableDeclarations(context: Context, excluded: Collection<JsirVariable>) {
-        val declaredVariables = (context.renderer.variableNames.keys - excluded).distinct()
+        val declaredVariables = (context.variableNames.keys - excluded).distinct()
         if (declaredVariables.isNotEmpty()) {
-            val declarations = JsVars(*declaredVariables.map { JsVars.JsVar(context.renderer.variableNames[it]!!) }.toTypedArray())
+            val declarations = JsVars(*declaredVariables.map { JsVars.JsVar(context.variableNames[it]!!) }.toTypedArray())
                     .apply { synthetic = true }
             context.jsFunction.body.statements.add(0, declarations)
         }
@@ -464,21 +473,22 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     private fun generateInternalName(descriptor: DeclarationDescriptor): JsName {
         if (descriptor is ModuleDescriptor) {
             return if (descriptor == pool.module) {
-                wrapperFunction.scope.declareFreshName("_")
+                program.scope.declareName(rootNamespace.generateFreshName("_"))
             }
             else {
-                val (name, importName) = if (descriptor.builtIns.builtInsModule == descriptor) {
-                    Pair(wrapperFunction.scope.declareFreshName("kotlin"), "kotlin")
+                val (nameString, importName) = if (descriptor.builtIns.builtInsModule == descriptor) {
+                    Pair(rootNamespace.generateFreshName("kotlin"), "kotlin")
                 }
                 else {
                     val moduleName = descriptor.name.asString().let { it.substring(1, it.length - 1) }
                     if (moduleName == "kotlin") {
                         return getInternalName(descriptor.builtIns.builtInsModule)
                     }
-                    val internalName = wrapperFunction.scope.declareFreshName(Namer.LOCAL_MODULE_PREFIX +
-                                                                              Namer.suggestedModuleName(moduleName))
+                    val internalName = rootNamespace.generateFreshName(Namer.LOCAL_MODULE_PREFIX + Namer.suggestedModuleName(moduleName))
                     Pair(internalName, moduleName)
                 }
+
+                val name = program.scope.declareName(nameString)
                 wrapperFunction.parameters += JsParameter(name)
                 moduleNames += importName
                 name
@@ -486,13 +496,13 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         }
 
         if (descriptor is FunctionDescriptor && descriptor.containingDeclaration is ClassDescriptor) {
-            return wrapperFunction.scope.declareNameUnsafe(getNameForMemberFunction(descriptor.original))
+            return program.scope.declareName(getNameForMemberFunction(descriptor.original))
         }
         else if (descriptor is VariableAccessorDescriptor && descriptor.correspondingVariable.containingDeclaration is ClassDescriptor) {
-            return wrapperFunction.scope.declareNameUnsafe(getNameForMemberFunction(descriptor.original))
+            return program.scope.declareName(getNameForMemberFunction(descriptor.original))
         }
 
-        return wrapperFunction.scope.declareFreshName(generateName(descriptor))
+        return program.scope.declareName(rootNamespace.generateFreshName(generateName(descriptor)))
     }
 
     private fun generateName(descriptor: DeclarationDescriptor): String {
@@ -526,11 +536,12 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         }
     }
 
-    private inner class Context(val jsFunction: JsFunction) : JsirRenderingContext {
+    private inner class Context(val jsFunction: JsFunction, val namespace: Namespace) : JsirRenderingContext {
+        val variableNames = mutableMapOf<JsirVariable, JsName>()
         val renderer = StatementRenderer(this)
 
         override val scope: JsScope
-            get() = jsFunction.scope
+            get() = program.scope
 
         override val module: ModuleDescriptor
             get() = this@JsirRendererImpl.module
@@ -542,6 +553,12 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         override fun getInternalName(descriptor: DeclarationDescriptor) = this@JsirRendererImpl.getInternalName(descriptor)
 
         override fun getInternalName(field: JsirField) = this@JsirRendererImpl.getInternalName(field)
+
+        override fun getInternalName(variable: JsirVariable): JsName = variableNames.getOrPut(variable) {
+            program.scope.declareName(namespace.generateFreshName(variable.suggestedName ?: "\$tmp"))
+        }
+
+        override fun getTemporaryName(template: String) = program.scope.declareName(namespace.generateFreshName(template))
 
         override fun getStringLiteral(value: String) = program.getStringLiteral(value)
 
@@ -556,5 +573,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         override fun getFreeVariables(function: JsirFunction) = freeVariablesByFunction[function].orEmpty()
 
         override fun lookupFunction(descriptor: FunctionDescriptor) = descriptorToFunction[descriptor]
+
+
     }
 }

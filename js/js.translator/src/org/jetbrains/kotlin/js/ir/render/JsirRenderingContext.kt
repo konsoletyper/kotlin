@@ -35,6 +35,10 @@ interface JsirRenderingContext {
 
     fun getInternalName(field: JsirField): JsName
 
+    fun getInternalName(variable: JsirVariable): JsName
+
+    fun getTemporaryName(template: String): JsName
+
     fun getStringLiteral(value: String): JsStringLiteral
 
     fun getNumberLiteral(value: Int): JsNumberLiteral

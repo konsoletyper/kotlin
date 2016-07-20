@@ -28,7 +28,6 @@ import org.jetbrains.kotlin.psi.psiUtil.getTextWithLocation
 
 class StatementRenderer(val context: JsirRenderingContext) {
     val labelNames = mutableMapOf<JsirLabeled, JsName>()
-    val variableNames = mutableMapOf<JsirVariable, JsName>()
 
     fun render(statement: JsirStatement): List<JsStatement> = when (statement) {
         is JsirStatement.Assignment -> {
@@ -127,7 +126,6 @@ class StatementRenderer(val context: JsirRenderingContext) {
             jsTry.catches += statement.catchClauses.map {
                 val jsCatchVar = it.catchVariable.suggestedName ?: "\$tmp"
                 val jsCatch = JsCatch(context.scope, jsCatchVar, JsBlock())
-                variableNames[it.catchVariable] = jsCatch.parameter.name
 
                 jsCatch.body.statements += render(it.body)
                 jsCatch
@@ -159,14 +157,8 @@ class StatementRenderer(val context: JsirRenderingContext) {
         }
     }
 
-    fun getJsNameFor(variable: JsirVariable) = variable.getJsName()
-
     fun JsirLabeled.getJsName(): JsName = labelNames.getOrPut(this) {
         context.scope.declareFreshName(suggestedLabelName ?: "\$label")
-    }
-
-    fun JsirVariable.getJsName(): JsName = variableNames.getOrPut(this) {
-        context.scope.declareFreshName(suggestedName ?: "\$tmp")
     }
 
     fun render(expression: JsirExpression): JsExpression = when (expression) {
@@ -187,7 +179,7 @@ class StatementRenderer(val context: JsirRenderingContext) {
         is JsirExpression.This -> JsLiteral.THIS
         is JsirExpression.Undefined -> JsPrefixOperation(JsUnaryOperator.VOID, context.getNumberLiteral(0))
 
-        is JsirExpression.VariableReference -> JsAstUtils.pureFqn(expression.variable.getJsName(), null)
+        is JsirExpression.VariableReference -> pureFqn(context.getInternalName(expression.variable), null)
 
         is JsirExpression.Binary -> {
             val left = render(expression.left)
@@ -252,7 +244,7 @@ class StatementRenderer(val context: JsirRenderingContext) {
                     val jsReceiver = expression.receiver?.let { render(it) }
                     val callee = context.lookupFunction(function.original)
                     val freeVariables = callee?.let { context.getFreeVariables(it) }.orEmpty()
-                    val jsClosureArgs = freeVariables.map { it.getJsName().makeRef() }
+                    val jsClosureArgs = freeVariables.map { context.getInternalName(it).makeRef() }
                     val jsArgs = expression.arguments.map { render(it) }.toTypedArray()
                     fun withClosureArgs(expression: JsExpression) = if (jsClosureArgs.isNotEmpty()) {
                         JsInvocation(expression, jsClosureArgs)
@@ -292,7 +284,7 @@ class StatementRenderer(val context: JsirRenderingContext) {
                 reference
             }
             else {
-                val closure = freeVariables.map { it.getJsName().makeRef() }
+                val closure = freeVariables.map { context.getInternalName(it).makeRef() }
                 JsInvocation(reference, closure)
             }
             result
