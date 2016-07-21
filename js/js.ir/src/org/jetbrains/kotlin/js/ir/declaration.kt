@@ -18,45 +18,72 @@ package org.jetbrains.kotlin.js.ir
 
 import org.jetbrains.kotlin.descriptors.*
 
-interface JsirContainer {
-    val functions: MutableMap<FunctionDescriptor, JsirFunction>
-    val properties: MutableMap<VariableDescriptorWithAccessors, JsirProperty>
-    val initializerBody: MutableList<JsirStatement>
+sealed class JsirContainer {
+    val functions: Map<FunctionDescriptor, JsirFunction>
+        get() = mutableFunctions
+    val properties: Map<VariableDescriptorWithAccessors, JsirProperty>
+        get() = mutableProperties
+
+    val initializerBody = mutableListOf<JsirStatement>()
+
+    internal val mutableFunctions = mutableMapOf<FunctionDescriptor, JsirFunction>()
+    internal val mutableProperties = mutableMapOf<VariableDescriptorWithAccessors, JsirProperty>()
 }
 
-class JsirFunction(val declaration: FunctionDescriptor) {
+class JsirFunction(val declaration: FunctionDescriptor, val container: JsirContainer, val static: Boolean) {
     val parameters = mutableListOf<JsirParameter>()
     val body = mutableListOf<JsirStatement>()
+
+    init {
+        container.mutableFunctions[declaration] = this
+    }
+
+    fun delete() {
+        if (container.mutableFunctions[declaration] == this) {
+            container.mutableFunctions.keys -= declaration
+        }
+    }
 }
 
 class JsirParameter(val variable: JsirVariable) {
     val defaultBody = mutableListOf<JsirStatement>()
 }
 
-class JsirProperty(val declaration: VariableDescriptorWithAccessors)
+class JsirProperty(val declaration: VariableDescriptorWithAccessors, val container: JsirContainer) {
+    init {
+        container.mutableProperties[declaration] = this
+    }
 
-class JsirClass(val declaration: ClassDescriptor) : JsirContainer {
-    override val initializerBody = mutableListOf<JsirStatement>()
+    fun delete() {
+        if (container.mutableProperties[declaration] == this) {
+            container.mutableProperties.keys -= declaration
+        }
+    }
+}
 
-    override val functions = mutableMapOf<FunctionDescriptor, JsirFunction>()
-
-    override val properties = mutableMapOf<VariableDescriptorWithAccessors, JsirProperty>()
-
+class JsirClass(val declaration: ClassDescriptor, val pool: JsirPool) : JsirContainer() {
     var hasOuterProperty = false
 
     val closureFields = mutableSetOf<JsirVariable>()
 
     val delegateFields = mutableSetOf<JsirField.Delegate>()
+
+    init {
+        pool.mutableClasses[declaration] = this
+    }
+
+    fun delete() {
+        if (pool.mutableClasses[declaration] == this) {
+            pool.mutableClasses.keys -= declaration
+        }
+    }
 }
 
-class JsirPool(val module: ModuleDescriptor) : JsirContainer {
-    override val functions = mutableMapOf<FunctionDescriptor, JsirFunction>()
+class JsirPool(val module: ModuleDescriptor) : JsirContainer() {
+    val classes: Map<ClassDescriptor, JsirClass>
+        get() = mutableClasses
 
-    override val properties = mutableMapOf<VariableDescriptorWithAccessors, JsirProperty>()
-
-    val classes = mutableMapOf<ClassDescriptor, JsirClass>()
-
-    override val initializerBody = mutableListOf<JsirStatement>()
+    internal val mutableClasses = mutableMapOf<ClassDescriptor, JsirClass>()
 }
 
 class JsirVariable(val suggestedName: String? = null)

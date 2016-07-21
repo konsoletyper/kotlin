@@ -226,7 +226,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             val declaration = function.declaration
             if (declaration is ConstructorDescriptor && declaration.isPrimary) continue
 
-            val lhs = JsNameRef(getNameForMemberFunction(function.declaration), makePrototype(constructorName))
+            val lhs = JsNameRef(getInternalName(function.declaration), makePrototype(constructorName))
             wrapperFunction.body.statements += JsAstUtils.assignment(lhs, renderFunction(function)).makeStmt()
         }
 
@@ -442,15 +442,41 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         return when (overriddenFunction) {
             is PropertyGetterDescriptor -> "get_" + ManglingUtils.getSuggestedName(overriddenFunction.correspondingProperty)
             is PropertySetterDescriptor -> "set_" + ManglingUtils.getSuggestedName(overriddenFunction.correspondingProperty)
-            else -> ManglingUtils.getSuggestedName(overriddenFunction)
+            else -> {
+                if (overriddenFunction.name.isSpecial) {
+                    val id = when (overriddenFunction) {
+                        is FunctionDescriptor -> "lambda"
+                        is PropertyGetterDescriptor -> "get_anonymousProperty"
+                        is PropertySetterDescriptor -> "set_anonymousProperty"
+                        is PropertyDescriptor -> "anonymousProperty"
+                        else -> "anonymous"
+                    }
+                    rootNamespace.generateFreshName(id)
+                }
+                else {
+                    ManglingUtils.getSuggestedName(overriddenFunction)
+                }
+            }
         }
     }
 
     private fun getInternalName(descriptor: DeclarationDescriptor): JsName {
         return if (descriptor !in internalNameCache) {
-            val name = if (descriptor == descriptor.original) generateInternalName(descriptor) else getInternalName(descriptor.original)
+
+            val (name, import) = if (
+                    descriptor is VariableAccessorDescriptor &&
+                    descriptor.correspondingVariable.containingDeclaration is ClassDescriptor
+            ) {
+                Pair(program.scope.declareName(getNameForMemberFunction(descriptor.original)), false)
+            }
+            else if (descriptor is FunctionDescriptor && isDeclaredInClass(descriptor)) {
+                Pair(program.scope.declareName(getNameForMemberFunction(descriptor.original)), false)
+            }
+            else {
+                Pair(generateInternalName(descriptor.original), true)
+            }
             internalNameCache[descriptor] = name
-            if (descriptor !is ModuleDescriptor) {
+            if (descriptor !is ModuleDescriptor && import) {
                 val module = DescriptorUtils.getContainingModule(descriptor)
                 if (module != pool.module) {
                     importsSection += JsVars(JsVars.JsVar(name, getExternalName(descriptor)))
@@ -461,6 +487,11 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         else {
             internalNameCache[descriptor]!!
         }
+    }
+
+    private fun isDeclaredInClass(function: FunctionDescriptor): Boolean {
+        return generateSequence(function as CallableMemberDescriptor) { it.containingDeclaration as? CallableMemberDescriptor }
+                .last().containingDeclaration is ClassDescriptor
     }
 
     private fun getInternalName(field: JsirField) = when (field) {
@@ -493,13 +524,6 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                 moduleNames += importName
                 name
             }
-        }
-
-        if (descriptor is FunctionDescriptor && descriptor.containingDeclaration is ClassDescriptor) {
-            return program.scope.declareName(getNameForMemberFunction(descriptor.original))
-        }
-        else if (descriptor is VariableAccessorDescriptor && descriptor.correspondingVariable.containingDeclaration is ClassDescriptor) {
-            return program.scope.declareName(getNameForMemberFunction(descriptor.original))
         }
 
         return program.scope.declareName(rootNamespace.generateFreshName(generateName(descriptor)))

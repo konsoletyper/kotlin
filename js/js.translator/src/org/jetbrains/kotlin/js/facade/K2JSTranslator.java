@@ -28,7 +28,12 @@ import org.jetbrains.kotlin.js.facade.exceptions.TranslationException;
 import org.jetbrains.kotlin.js.inline.JsInliner;
 import org.jetbrains.kotlin.js.ir.JsirPool;
 import org.jetbrains.kotlin.js.ir.generate.JsirGenerator;
-import org.jetbrains.kotlin.js.ir.render.*;
+import org.jetbrains.kotlin.js.ir.render.JsirRenderer;
+import org.jetbrains.kotlin.js.ir.render.builtins.*;
+import org.jetbrains.kotlin.js.ir.render.nativecall.NativeClassFilter;
+import org.jetbrains.kotlin.js.ir.render.nativecall.NativeFunctionFilter;
+import org.jetbrains.kotlin.js.ir.render.nativecall.NativeInvocationRenderer;
+import org.jetbrains.kotlin.js.ir.render.nativecall.NativeNameContributor;
 import org.jetbrains.kotlin.js.ir.transform.Transformer;
 import org.jetbrains.kotlin.js.translate.context.StandardClasses;
 import org.jetbrains.kotlin.js.translate.context.TranslationContext;
@@ -100,6 +105,7 @@ public final class K2JSTranslator {
         renderer.getInvocationRenderers().add(new ToStringRenderer());
         renderer.getInvocationRenderers().add(new RangeMethodRenderer());
         renderer.getInvocationRenderers().add(new NativeInvocationRenderer());
+        renderer.getInvocationRenderers().add(new ArrayInvocationRenderer());
         renderer.getClassFilters().add(new NativeClassFilter());
         renderer.getFunctionFilters().add(new NativeFunctionFilter());
         renderer.getExternalNameContributors().add(new BuiltinNameContributor(

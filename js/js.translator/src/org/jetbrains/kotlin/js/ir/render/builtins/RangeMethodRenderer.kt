@@ -14,12 +14,15 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.render
+package org.jetbrains.kotlin.js.ir.render.builtins
 
 import com.google.dart.compiler.backend.js.ast.JsExpression
 import com.google.dart.compiler.backend.js.ast.JsNew
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.ir.JsirExpression
+import org.jetbrains.kotlin.js.ir.render.InvocationRenderer
+import org.jetbrains.kotlin.js.ir.render.JsirRenderingContext
+import org.jetbrains.kotlin.js.ir.render.kotlinReference
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 
 class RangeMethodRenderer() : InvocationRenderer {
@@ -32,14 +35,17 @@ class RangeMethodRenderer() : InvocationRenderer {
         }
     }
 
-    override fun render(invocation: JsirExpression.Invocation, context: JsirRenderingContext): JsExpression {
-        val className = invocation.function.containingDeclaration.fqNameSafe.asString()
+    override fun render(
+            function: FunctionDescriptor, receiver: JsirExpression?, arguments: List<JsirExpression>,
+            virtual: Boolean, context: JsirRenderingContext
+    ): JsExpression {
+        val className = function.containingDeclaration.fqNameSafe.asString()
         val constructor = when (className) {
             "kotlin.Int" -> "NumberRange"
             "kotlin.Long" -> "LongRange"
             else -> throw UnsupportedOperationException("Unsupported class: $className")
         }
-        val arguments = listOf(context.render(invocation.receiver!!), context.render(invocation.arguments[0]))
-        return JsNew(context.kotlinReference(constructor), arguments)
+        val jsArguments = listOf(context.render(receiver!!), context.render(arguments[0]))
+        return JsNew(context.kotlinReference(constructor), jsArguments)
     }
 }

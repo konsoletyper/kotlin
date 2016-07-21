@@ -100,7 +100,7 @@ internal class DelegationGenerator(val context: JsirContext, val psi: KtClassOrO
             descriptor: FunctionDescriptor, overriddenDescriptor: FunctionDescriptor,
             field : JsirField
     ) {
-        val function = JsirFunction(descriptor)
+        val function = JsirFunction(descriptor, cls, static = false)
         val extensionParameter = if (descriptor.isExtension) JsirVariable("\$receiver") else null
         context.nestedFunction(descriptor, null) {
             context.nestedBlock(function.body) {
@@ -113,7 +113,6 @@ internal class DelegationGenerator(val context: JsirContext, val psi: KtClassOrO
                 context.append(JsirStatement.Return(invocation, descriptor))
             }
         }
-        cls.functions[descriptor] = function
     }
 
     private fun getSuperClass(specifier: KtSuperTypeListEntry): ClassDescriptor =

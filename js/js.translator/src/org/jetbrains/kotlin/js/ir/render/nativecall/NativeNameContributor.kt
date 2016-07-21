@@ -14,17 +14,22 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.render
+package org.jetbrains.kotlin.js.ir.render.nativecall
 
 import com.google.dart.compiler.backend.js.ast.JsExpression
+import com.google.dart.compiler.backend.js.ast.JsNameRef
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
-import org.jetbrains.kotlin.js.translate.context.StandardClasses
-import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
-import org.jetbrains.kotlin.resolve.descriptorUtil.module
+import org.jetbrains.kotlin.js.ir.render.ExternalNameContributor
+import org.jetbrains.kotlin.js.ir.render.JsirRenderingContext
+import org.jetbrains.kotlin.js.ir.render.kotlinReference
+import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils
 
-class BuiltinNameContributor(private val standardClasses: StandardClasses) : ExternalNameContributor {
+class NativeNameContributor : ExternalNameContributor {
     override fun contribute(declaration: DeclarationDescriptor, context: JsirRenderingContext): JsExpression? {
-        return if (standardClasses.isStandardObject(declaration) || declaration.builtIns.builtInsModule == declaration.module) {
+        return if (AnnotationsUtils.isNativeObject(declaration)) {
+            JsNameRef(declaration.name.asString())
+        }
+        else if (AnnotationsUtils.isLibraryObject(declaration)) {
             context.kotlinReference(declaration.name.asString())
         }
         else {

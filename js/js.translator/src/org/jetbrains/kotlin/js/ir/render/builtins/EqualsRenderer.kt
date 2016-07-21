@@ -14,18 +14,19 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.render
+package org.jetbrains.kotlin.js.ir.render.builtins
 
 import com.google.dart.compiler.backend.js.ast.JsExpression
 import com.google.dart.compiler.backend.js.ast.JsInvocation
-import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
+import org.jetbrains.kotlin.js.ir.render.JsirRenderingContext
+import org.jetbrains.kotlin.js.ir.render.kotlinReference
 
-class ToStringRenderer : AnyMethodRenderer() {
+class EqualsRenderer : AnyMethodRenderer() {
     override fun matchNameAndArgumentCount(name: String, argumentCount: Int): Boolean {
-        return name == "toString" && argumentCount == 0
+        return name == "equals" && argumentCount == 1
     }
 
     override fun render(context: JsirRenderingContext, receiver: JsExpression, arguments: List<JsExpression>): JsExpression {
-        return JsInvocation(JsAstUtils.pureFqn("toString", receiver))
+        return JsInvocation(context.kotlinReference("equals"), receiver, arguments[0])
     }
 }

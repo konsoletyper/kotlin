@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.render
+package org.jetbrains.kotlin.js.ir.render.nativecall
 
 import org.jetbrains.kotlin.js.ir.JsirClass
 import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils

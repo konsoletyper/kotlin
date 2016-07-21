@@ -23,5 +23,7 @@ import org.jetbrains.kotlin.js.ir.JsirExpression
 interface InvocationRenderer {
     fun isApplicable(descriptor: FunctionDescriptor): Boolean
 
-    fun render(invocation: JsirExpression.Invocation, context: JsirRenderingContext): JsExpression
+    fun render(function: FunctionDescriptor, receiver: JsirExpression?, arguments: List<JsirExpression>,
+               virtual: Boolean, context: JsirRenderingContext
+    ): JsExpression
 }

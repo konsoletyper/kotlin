@@ -238,7 +238,7 @@ class StatementRenderer(val context: JsirRenderingContext) {
                 val function = expression.function
                 val invocationRenderer = context.getInvocationRenderer(function)
                 if (invocationRenderer != null) {
-                    invocationRenderer.render(expression, context)
+                    invocationRenderer.render(expression.function, expression.receiver, expression.arguments, expression.virtual, context)
                 }
                 else {
                     val jsReceiver = expression.receiver?.let { render(it) }
@@ -277,9 +277,18 @@ class StatementRenderer(val context: JsirRenderingContext) {
 
         is JsirExpression.FunctionReference -> {
             val function = expression.function
-            val callee = context.lookupFunction(function.original)
-            val freeVariables = callee?.let { context.getFreeVariables(it) }.orEmpty()
-            val reference = pureFqn(context.getInternalName(function), null)
+
+            val callee = context.lookupFunction(function.original)!!
+            val calleeContainer = callee.container
+            val freeVariables = context.getFreeVariables(callee).orEmpty()
+            val reference: JsExpression = if (calleeContainer is JsirClass) {
+                val staticRef = pureFqn("prototype", pureFqn(context.getInternalName(calleeContainer.declaration), null))
+                JsInvocation(pureFqn("bind", pureFqn(context.getInternalName(function), staticRef)), JsLiteral.THIS)
+            }
+            else {
+                pureFqn(context.getInternalName(function), null)
+            }
+
             val result: JsExpression = if (freeVariables.isEmpty()) {
                 reference
             }
@@ -299,9 +308,15 @@ class StatementRenderer(val context: JsirRenderingContext) {
         }
 
         is JsirExpression.NewInstance -> {
-            val jsConstructor = pureFqn(context.getInternalName(expression.constructor.containingDeclaration), null)
-            val jsArgs = expression.arguments.map { render(it) }
-            JsNew(jsConstructor, jsArgs)
+            val invocationRenderer = context.getInvocationRenderer(expression.constructor)
+            if (invocationRenderer != null) {
+                invocationRenderer.render(expression.constructor, null, expression.arguments, false, context)
+            }
+            else {
+                val jsConstructor = pureFqn(context.getInternalName(expression.constructor.containingDeclaration), null)
+                val jsArgs = expression.arguments.map { render(it) }
+                JsNew(jsConstructor, jsArgs)
+            }
         }
 
         is JsirExpression.FieldAccess -> {

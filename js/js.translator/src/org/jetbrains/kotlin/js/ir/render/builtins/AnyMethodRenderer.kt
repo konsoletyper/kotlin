@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-package org.jetbrains.kotlin.js.ir.render
+package org.jetbrains.kotlin.js.ir.render.builtins
 
 import com.google.dart.compiler.backend.js.ast.JsExpression
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.ir.JsirExpression
 import org.jetbrains.kotlin.js.ir.isAnyFunction
+import org.jetbrains.kotlin.js.ir.render.InvocationRenderer
+import org.jetbrains.kotlin.js.ir.render.JsirRenderingContext
 
 abstract class AnyMethodRenderer : InvocationRenderer {
     override fun isApplicable(descriptor: FunctionDescriptor): Boolean {
@@ -30,10 +32,11 @@ abstract class AnyMethodRenderer : InvocationRenderer {
 
     protected abstract fun matchNameAndArgumentCount(name: String, argumentCount: Int): Boolean
 
-    override fun render(invocation: JsirExpression.Invocation, context: JsirRenderingContext): JsExpression {
-        val receiver = context.render(invocation.receiver!!)
-        val arguments = invocation.arguments.map { context.render(it) }
-        return render(context, receiver, arguments)
+    override fun render(
+            function: FunctionDescriptor, receiver: JsirExpression?, arguments: List<JsirExpression>,
+            virtual: Boolean, context: JsirRenderingContext
+    ): JsExpression {
+        return render(context, context.render(receiver!!), arguments.map { context.render(it) })
     }
 
     protected abstract fun render(context: JsirRenderingContext, receiver: JsExpression, arguments: List<JsExpression>): JsExpression
