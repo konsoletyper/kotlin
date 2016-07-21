@@ -26,7 +26,9 @@ import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
+import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
+import org.jetbrains.kotlin.resolve.descriptorUtil.isExtension
 import org.jetbrains.kotlin.types.expressions.OperatorConventions
 
 internal fun JsirContext.generateBinary(expression: KtBinaryExpression): JsirExpression {
@@ -78,11 +80,21 @@ private fun JsirContext.generateAssignment(psi: KtBinaryExpression) {
 
     if (BindingUtils.isVariableReassignment(bindingContext, psi)) {
         val variable = generateVariable(leftPsi)
-        variable.set(JsirExpression.Invocation(variable.get(), call.resultingDescriptor as FunctionDescriptor, true, generate(rightPsi)))
+        variable.set(generateCallForAssignment(variable.get(), rightPsi, call))
     }
     else {
         val left = memoize(leftPsi)
-        append(JsirExpression.Invocation(left, call.resultingDescriptor as FunctionDescriptor, true, generate(rightPsi)))
+        append(generateCallForAssignment(left, rightPsi, call))
+    }
+}
+
+private fun JsirContext.generateCallForAssignment(left: JsirExpression, rightPsi: KtExpression, call: ResolvedCall<*>): JsirExpression {
+    val function = call.resultingDescriptor as FunctionDescriptor
+    return if (!function.isExtension) {
+        JsirExpression.Invocation(left, call.resultingDescriptor as FunctionDescriptor, true, generate(rightPsi))
+    }
+    else {
+        JsirExpression.Invocation(null, call.resultingDescriptor as FunctionDescriptor, false, left, generate(rightPsi))
     }
 }
 

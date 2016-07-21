@@ -108,18 +108,26 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
 
     fun getVariable(descriptor: VariableDescriptor): LocalVariableAccessor {
         val container = descriptor.containingDeclaration
-        if (container !is FunctionDescriptor) {
-            throw IllegalArgumentException("Can only get accessor for local variables. $descriptor is not a local variable")
+        val containingFunction = if (container !is FunctionDescriptor) {
+            if (container.containingDeclaration is PackageFragmentDescriptor) {
+                null
+            }
+            else {
+                throw IllegalArgumentException("Can only get accessor for local variables. $descriptor is not a local variable")
+            }
+        }
+        else {
+            container
         }
 
         val localVar = localVariables.getOrPut(descriptor) {
-            val result = JsirVariable(descriptor.name.asString())
+            val result = JsirVariable(if (!descriptor.name.isSpecial) descriptor.name.asString() else null)
             if (container == function) {
                 declaredLocalVariables.add(descriptor)
             }
             result
         }
-        return LocalVariableAccessor(localVar, container)
+        return LocalVariableAccessor(localVar, containingFunction)
     }
 
     fun nestedBlock(body: MutableList<JsirStatement>, action: () -> Unit) {
@@ -244,7 +252,7 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         throw JsirGenerationException(expression, e)
     }
 
-    inner class LocalVariableAccessor(val localVariable: JsirVariable, val declaringFunction: FunctionDescriptor) : VariableAccessor {
+    inner class LocalVariableAccessor(val localVariable: JsirVariable, val declaringFunction: FunctionDescriptor?) : VariableAccessor {
         override fun get() = makeReference()
 
         override fun set(value: JsirExpression) {

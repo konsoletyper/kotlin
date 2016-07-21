@@ -123,12 +123,39 @@ class StatementRenderer(val context: JsirRenderingContext) {
         is JsirStatement.Try -> {
             val jsTry = JsTry().apply { tryBlock = JsBlock() }
             jsTry.tryBlock.statements += render(statement.body)
-            jsTry.catches += statement.catchClauses.map {
-                val jsCatchVar = it.catchVariable.suggestedName ?: "\$tmp"
-                val jsCatch = JsCatch(context.scope, jsCatchVar, JsBlock())
+            if (statement.catchClauses.isNotEmpty()) {
+                val jsCatch = JsCatch(context.scope, "\$tmp", JsBlock())
+                val jsCatchVar = jsCatch.parameter.name
 
-                jsCatch.body.statements += render(it.body)
-                jsCatch
+                var defaultCatchExists = false
+                var appendNextStatement = { statement: JsStatement -> jsCatch.body.statements += statement }
+                for (catchClause in statement.catchClauses) {
+                    val exceptionType = catchClause.exceptionType
+                    if (exceptionType == null) {
+                        val jsCatchBody = JsBlock()
+                        appendNextStatement(jsCatchBody)
+                        jsCatchBody.statements += render(catchClause.body)
+                        defaultCatchExists = true
+                        break
+                    }
+                    else {
+                        val typeCheck = JsInvocation(context.kotlinReference("isType"),
+                                                     JsNameRef(jsCatchVar), context.getInternalName(exceptionType).makeRef())
+                        val jsCatchBody = JsBlock()
+                        val typeCondition = JsIf(typeCheck, jsCatchBody)
+                        jsCatchBody.statements += JsAstUtils.assignment(
+                                context.getInternalName(catchClause.catchVariable).makeRef(),
+                                jsCatchVar.makeRef()).makeStmt()
+                        jsCatchBody.statements += render(catchClause.body)
+                        appendNextStatement(typeCondition)
+                        appendNextStatement = { typeCondition.elseStatement = it }
+                    }
+                }
+                if (!defaultCatchExists) {
+                    appendNextStatement(JsThrow(jsCatchVar.makeRef()))
+                }
+
+                jsTry.catches += jsCatch
             }
             if (statement.finallyClause.isNotEmpty()) {
                 jsTry.finallyBlock = JsBlock()

@@ -432,8 +432,10 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             context.assign(temporary, context.generate(expression.tryBlock))
         }
         for (clausePsi in expression.catchClauses) {
-            val catchVar = JsirVariable()
-            val catch = JsirStatement.Catch(catchVar).apply {
+            val parameterDescriptor = context.bindingContext[BindingContext.VALUE_PARAMETER, clausePsi.catchParameter!!]!!
+            val catchVar = context.getVariable(parameterDescriptor).localVariable
+            val exceptionType = parameterDescriptor.type.constructor.declarationDescriptor as? ClassDescriptor
+            val catch = JsirStatement.Catch(catchVar, exceptionType).apply {
                 statement.catchClauses += this
             }
             context.nestedBlock(catch.body) {

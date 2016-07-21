@@ -142,9 +142,11 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             wrapperFunction.body.statements += jsFunction.makeStmt()
         }
 
-        for (statement in pool.initializerBody) {
+        if (pool.initializerBody.isNotEmpty()) {
             val initializerStart = wrapperFunction.body.statements.size
-            wrapperFunction.body.statements += globalContext.render(statement)
+            for (statement in pool.initializerBody) {
+                wrapperFunction.body.statements += globalContext.render(statement)
+            }
             val declaredVariables = globalContext.variableNames.keys
             if (declaredVariables.isNotEmpty()) {
                 val declarations = JsVars(*declaredVariables.map { JsVars.JsVar(globalContext.variableNames[it]!!) }.toTypedArray())
@@ -462,27 +464,33 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
 
     private fun getInternalName(descriptor: DeclarationDescriptor): JsName {
         return if (descriptor !in internalNameCache) {
-
-            val (name, import) = if (
-                    descriptor is VariableAccessorDescriptor &&
-                    descriptor.correspondingVariable.containingDeclaration is ClassDescriptor
-            ) {
-                Pair(program.scope.declareName(getNameForMemberFunction(descriptor.original)), false)
-            }
-            else if (descriptor is FunctionDescriptor && isDeclaredInClass(descriptor)) {
-                Pair(program.scope.declareName(getNameForMemberFunction(descriptor.original)), false)
+            if (descriptor is CallableDescriptor && descriptor.original != descriptor) {
+                val name = getInternalName(descriptor.original)
+                internalNameCache[descriptor] = name
+                name
             }
             else {
-                Pair(generateInternalName(descriptor.original), true)
-            }
-            internalNameCache[descriptor] = name
-            if (descriptor !is ModuleDescriptor && import) {
-                val module = DescriptorUtils.getContainingModule(descriptor)
-                if (module != pool.module) {
-                    importsSection += JsVars(JsVars.JsVar(name, getExternalName(descriptor)))
+                val (name, import) = if (
+                    descriptor is VariableAccessorDescriptor &&
+                    descriptor.correspondingVariable.containingDeclaration is ClassDescriptor
+                ) {
+                    Pair(program.scope.declareName(getNameForMemberFunction(descriptor.original)), false)
                 }
+                else if (descriptor is FunctionDescriptor && isDeclaredInClass(descriptor)) {
+                    Pair(program.scope.declareName(getNameForMemberFunction(descriptor.original)), false)
+                }
+                else {
+                    Pair(generateInternalName(descriptor.original), true)
+                }
+                internalNameCache[descriptor] = name
+                if (descriptor !is ModuleDescriptor && import) {
+                    val module = DescriptorUtils.getContainingModule(descriptor)
+                    if (module != pool.module) {
+                        importsSection += JsVars(JsVars.JsVar(name, getExternalName(descriptor)))
+                    }
+                }
+                name
             }
-            name
         }
         else {
             internalNameCache[descriptor]!!
@@ -597,7 +605,5 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         override fun getFreeVariables(function: JsirFunction) = freeVariablesByFunction[function].orEmpty()
 
         override fun lookupFunction(descriptor: FunctionDescriptor) = descriptorToFunction[descriptor]
-
-
     }
 }
