@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.js.ir.render
 
 import com.google.dart.compiler.backend.js.ast.*
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
@@ -46,6 +47,8 @@ interface JsirRenderingContext {
     fun getNumberLiteral(value: Double): JsNumberLiteral
 
     fun getInvocationRenderer(function: FunctionDescriptor): InvocationRenderer?
+
+    fun getObjectReferenceRenderer(cls: ClassDescriptor): ObjectReferenceRenderer?
 
     fun getFreeVariables(function: JsirFunction): Set<JsirVariable>
 

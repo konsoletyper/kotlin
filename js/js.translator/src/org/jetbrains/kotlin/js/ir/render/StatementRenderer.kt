@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.js.ir.*
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils.pureFqn
 import org.jetbrains.kotlin.psi.psiUtil.getTextWithLocation
+import org.jetbrains.kotlin.resolve.descriptorUtil.module
 
 class StatementRenderer(val context: JsirRenderingContext) {
     val labelNames = mutableMapOf<JsirLabeled, JsName>()
@@ -336,7 +337,20 @@ class StatementRenderer(val context: JsirRenderingContext) {
         }
 
         is JsirExpression.ObjectReference -> {
-            JsInvocation(JsNameRef("getInstance", context.getInternalName(expression.descriptor).makeRef()))
+            val renderer = context.getObjectReferenceRenderer(expression.descriptor)
+            if (renderer != null) {
+                renderer.render(expression.descriptor, context)
+            }
+            else {
+                val declaringModule = expression.descriptor.module
+                val result: JsExpression = if (declaringModule == context.module) {
+                    JsInvocation(JsNameRef("getInstance", context.getInternalName(expression.descriptor).makeRef()))
+                }
+                else {
+                    context.getInternalName(expression.descriptor).makeRef()
+                }
+                result
+            }
         }
 
         is JsirExpression.Application -> {
