@@ -327,7 +327,7 @@ class StatementRenderer(val context: JsirRenderingContext) {
         }
 
         is JsirExpression.ObjectReference -> {
-            JsNameRef("instance", context.getInternalName(expression.descriptor).makeRef())
+            JsInvocation(JsNameRef("getInstance", context.getInternalName(expression.descriptor).makeRef()))
         }
 
         is JsirExpression.Application -> {

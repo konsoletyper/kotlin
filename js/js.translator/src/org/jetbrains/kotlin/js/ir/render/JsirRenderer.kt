@@ -28,10 +28,7 @@ import org.jetbrains.kotlin.js.translate.utils.ManglingUtils
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
-import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassNotAny
-import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyPublicApi
-import org.jetbrains.kotlin.resolve.descriptorUtil.module
+import org.jetbrains.kotlin.resolve.descriptorUtil.*
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.utils.singletonOrEmptyList
 
@@ -128,10 +125,12 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
             renderFile(file)
         }
 
-        exportTopLevel()
         val topLevel = getInternalName(module.descriptor)
-        wrapperFunction.body.statements += JsVars(JsVars.JsVar(topLevel, rootPackage.jsObject))
+        val topLevelDef = JsVars.JsVar(topLevel)
+        wrapperFunction.body.statements += JsVars(topLevelDef)
+        exportTopLevel()
         exportTopLevelProperties()
+        topLevelDef.initExpression = rootPackage.jsObject
 
         val defineModuleRef = JsNameRef("defineModule", getInternalName(module.descriptor.builtIns.builtInsModule).makeRef())
         val defineModule = JsInvocation(defineModuleRef, program.getStringLiteral(module.descriptor.importName), topLevel.makeRef())
@@ -234,9 +233,7 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
         renderInterfaceDefaultMethods(cls)
 
         if (descriptor.kind == ClassKind.OBJECT) {
-            val instanceRef = JsNameRef("instance", constructorName.makeRef())
-            val instance = JsNew(constructorName.makeRef())
-            wrapperFunction.body.statements += JsAstUtils.assignment(instanceRef, instance).makeStmt()
+            renderObjectInstance(descriptor, constructorName)
         }
 
         for (function in cls.functions.values) {
@@ -252,6 +249,23 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
         closureFieldNames.clear()
         delegateFieldNames.clear()
         outerFieldNames.keys -= cls.descriptor
+    }
+
+    fun renderObjectInstance(descriptor: DeclarationDescriptor, constructorName: JsName) {
+        val instanceRef = JsNameRef("\$instance", constructorName.makeRef())
+        wrapperFunction.body.statements += JsAstUtils.assignment(instanceRef, JsLiteral.NULL).makeStmt()
+
+        val instance = JsNew(constructorName.makeRef())
+        val instanceFunctionRef = JsNameRef("getInstance", constructorName.makeRef())
+        val instanceGetter = JsFunction(wrapperFunction.scope, JsBlock(), "initializer: $descriptor")
+        wrapperFunction.body.statements += JsAstUtils.assignment(instanceFunctionRef, instanceGetter).makeStmt()
+
+        val newInstanceGetter = JsFunction(wrapperFunction.scope, JsBlock(), "initializer: $descriptor")
+        newInstanceGetter.body.statements += JsReturn(instanceRef.deepCopy())
+
+        instanceGetter.body.statements += JsAstUtils.assignment(instanceFunctionRef.deepCopy(), newInstanceGetter).makeStmt()
+        instanceGetter.body.statements += JsAstUtils.assignment(instanceRef.deepCopy(), instance).makeStmt()
+        instanceGetter.body.statements += JsReturn(instanceRef.deepCopy())
     }
 
     fun renderInterfaceDefaultMethods(cls: JsirClass) {
@@ -367,16 +381,32 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
             val key = jsPackage.scope.declareName(name).makeRef()
             jsPackage.jsObject.propertyInitializers += JsPropertyInitializer(key, getInternalName(descriptor).makeRef())
         }
-        for (cls in module.classes.values) {
+
+        classLoop@for (cls in module.classes.values) {
             val descriptor = cls.descriptor
-            if (descriptor.containingDeclaration.containingDeclaration !is PackageFragmentDescriptor) continue
+            if (descriptor.containingDeclaration !is PackageFragmentDescriptor) continue
             if (!descriptor.isEffectivelyPublicApi) continue
             if (classFilters.any { !it(cls) }) continue
 
             val name = ManglingUtils.getSuggestedName(descriptor)
-            val jsPackage = getPackage(DescriptorUtils.getParentOfType(descriptor, PackageFragmentDescriptor::class.java)!!.fqName)
-            val key = jsPackage.scope.declareName(name).makeRef()
-            jsPackage.jsObject.propertyInitializers += JsPropertyInitializer(key, getInternalName(descriptor).makeRef())
+            val container = descriptor.containingDeclaration
+            val fqName = when (container) {
+                is ClassDescriptor -> container.fqNameSafe
+                is PackageFragmentDescriptor -> container.fqName
+                else -> continue@classLoop
+            }
+
+            if (descriptor.kind == ClassKind.OBJECT) {
+                val literal = JsObjectLiteral()
+                val getter = JsNameRef("getInstance", getInternalName(descriptor).makeRef())
+                literal.propertyInitializers += JsPropertyInitializer(JsNameRef("get"), getter)
+                wrapperFunction.body.statements += createDefineProperty(getPackageRef(fqName), name, literal).makeStmt()
+            }
+            else {
+                val jsPackage = getPackage(fqName)
+                val key = jsPackage.scope.declareName(name).makeRef()
+                jsPackage.jsObject.propertyInitializers += JsPropertyInitializer(key, getInternalName(descriptor).makeRef())
+            }
         }
     }
 
@@ -399,10 +429,14 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
                     jsLiteral.propertyInitializers += JsPropertyInitializer(JsNameRef("set"), getInternalName(setter).makeRef())
                 }
 
-                val definition = JsInvocation(JsNameRef("defineProperty", "Object"), jsPackage, program.getStringLiteral(name), jsLiteral)
+                val definition = createDefineProperty(jsPackage, name, jsLiteral)
                 wrapperFunction.body.statements += definition.makeStmt()
             }
         }
+    }
+
+    private fun createDefineProperty(key: JsExpression, name: String, literal: JsObjectLiteral): JsInvocation {
+        return JsInvocation(JsNameRef("defineProperty", "Object"), key, program.getStringLiteral(name), literal)
     }
 
     private fun applyFilter(file: JsirFile, property: JsirProperty): Boolean {
@@ -567,7 +601,7 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
         while (currentDescriptor !is PackageFragmentDescriptor) {
             descriptors += currentDescriptor
             currentDescriptor = currentDescriptor.containingDeclaration!!
-            if (currentDescriptor is ClassDescriptor) break
+            if (descriptor !is ClassDescriptor && currentDescriptor is ClassDescriptor) break
         }
 
         val prefix = currentDescriptor.fqNameUnsafe.pathSegments().asSequence()
@@ -578,7 +612,7 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
 
         sb.append(descriptors.reversed().asSequence()
                 .map { getSuggestedName(it) }
-                .joinToString("_"))
+                .joinToString("\$"))
 
         return sb.toString()
     }
