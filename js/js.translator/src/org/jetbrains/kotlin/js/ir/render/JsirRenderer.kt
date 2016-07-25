@@ -124,37 +124,9 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
     }
 
     fun render(): JsFunction {
-        for (property in module.topLevelProperties) {
-            wrapperFunction.body.statements += JsVars(JsVars.JsVar(getInternalName(property.descriptor)))
+        for (file in module.files) {
+            renderFile(file)
         }
-
-        for (cls in module.classes.values) {
-            if (classFilters.any { !it(cls) }) continue
-            renderClass(cls)
-        }
-
-        for (function in module.topLevelFunctions) {
-            if (functionFilters.any { !it(function) }) continue
-            val jsFunction = renderFunction(function)
-            jsFunction.name = getInternalName(function.descriptor)
-            wrapperFunction.body.statements += jsFunction.makeStmt()
-        }
-
-        val initializerBody = module.files.flatMap { it.initializerBody }
-        if (initializerBody.isNotEmpty()) {
-            val initializerStart = wrapperFunction.body.statements.size
-            for (statement in initializerBody) {
-                wrapperFunction.body.statements += globalContext.render(statement)
-            }
-            val declaredVariables = globalContext.variableNames.keys
-            if (declaredVariables.isNotEmpty()) {
-                val declarations = JsVars(*declaredVariables.map { JsVars.JsVar(globalContext.variableNames[it]!!) }.toTypedArray())
-                        .apply { synthetic = true }
-                wrapperFunction.body.statements.add(initializerStart, declarations)
-            }
-        }
-
-        wrapperFunction.body.statements.addAll(0, importsSection)
 
         exportTopLevel()
         val topLevel = getInternalName(module.descriptor)
@@ -167,6 +139,52 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
 
         wrapperFunction.body.statements += JsReturn(topLevel.makeRef())
         return wrapperFunction
+    }
+
+    fun renderFile(file: JsirFile) {
+        for (property in file.properties.values) {
+            wrapperFunction.body.statements += JsVars(JsVars.JsVar(getInternalName(property.descriptor)))
+        }
+
+        for (cls in file.classes.values) {
+            if (classFilters.any { !it(cls) }) continue
+            renderClass(cls)
+        }
+
+        val initializerFunctionName = if (file.initializerBody.isNotEmpty()) {
+            rootNamespace.generateFreshName("init\$${fileNameToId(file.name)}")
+        }
+        else {
+            ""
+        }
+        for (function in file.functions.values) {
+            if (functionFilters.any { !it(function) }) continue
+            val prefix = mutableListOf<JsStatement>()
+            if (file.initializerBody.isNotEmpty()) {
+                prefix += JsInvocation(pureFqn(initializerFunctionName, null)).makeStmt()
+            }
+
+            val jsFunction = renderFunction(function, prefix)
+            jsFunction.name = getInternalName(function.descriptor)
+            wrapperFunction.body.statements += jsFunction.makeStmt()
+        }
+
+        if (file.initializerBody.isNotEmpty()) {
+            val initializerFunction = JsFunction(wrapperFunction.scope, JsBlock(), "initializer of ${file.name}")
+            initializerFunction.name = program.scope.declareName(initializerFunctionName)
+            wrapperFunction.body.statements += initializerFunction.makeStmt()
+
+            val emptyFunction = JsFunction(wrapperFunction.scope, JsBlock(), "empty function")
+            initializerFunction.body.statements += JsAstUtils.assignment(initializerFunction.name.makeRef(), emptyFunction).makeStmt()
+
+            val initializerContext = Context(initializerFunction, Namespace(rootNamespace))
+            for (statement in file.initializerBody) {
+                initializerFunction.body.statements += initializerContext.render(statement)
+            }
+            renderVariableDeclarations(initializerContext, emptySet())
+        }
+
+        wrapperFunction.body.statements.addAll(0, importsSection)
     }
 
     fun renderClass(cls: JsirClass) {
@@ -268,12 +286,12 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
 
     private fun makePrototype(name: JsName) = JsNameRef("prototype", name.makeRef())
 
-    fun renderFunction(function: JsirFunction): JsFunction {
+    fun renderFunction(function: JsirFunction, prefix: List<JsStatement> = emptyList()): JsFunction {
         val freeVariables = getFreeVariables(function)
 
         val context = Context(JsFunction(wrapperFunction.scope, JsBlock(), function.descriptor.toString()), Namespace(rootNamespace))
         val result = if (freeVariables.isEmpty()) {
-            renderRawFunction(function, wrapperFunction.scope, emptyMap(), context)
+            renderRawFunction(function, wrapperFunction.scope, emptyMap(), context, prefix)
         }
         else {
             val constructor = JsFunction(wrapperFunction.scope, JsBlock(), "closure constructor: ${function.descriptor}")
@@ -285,7 +303,7 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
                 constructor.parameters += JsParameter(name)
             }
 
-            val rawFunction = renderRawFunction(function, constructor.scope, freeVariableNames, context)
+            val rawFunction = renderRawFunction(function, constructor.scope, freeVariableNames, context, prefix)
             val boundFunction = JsInvocation(JsNameRef("bind", rawFunction), JsLiteral.THIS)
             constructor.body.statements += JsReturn(boundFunction)
             constructor
@@ -296,9 +314,11 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
 
     fun renderRawFunction(
             function: JsirFunction, scope: JsScope, freeVariables: Map<JsirVariable, JsName>,
-            context: Context = Context(JsFunction(scope, JsBlock(), function.descriptor.toString()), Namespace(rootNamespace))
+            context: Context = Context(JsFunction(scope, JsBlock(), function.descriptor.toString()), Namespace(rootNamespace)),
+            prefix: List<JsStatement>
     ): JsFunction {
         val jsFunction = context.jsFunction
+        jsFunction.body.statements += prefix
         context.variableNames += freeVariables
 
         renderRawFunctionBody(function, context)
@@ -569,6 +589,19 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
             is PropertySetterDescriptor -> "set_" + getSuggestedName(descriptor.correspondingProperty)
             else -> if (descriptor.name.isSpecial) "f" else descriptor.name.asString()
         }
+    }
+
+    private fun fileNameToId(name: String): String {
+        val sb = StringBuilder()
+        for (c in name) {
+            when (c) {
+                in '0'..'9',
+                in 'a'..'z',
+                in 'A'..'Z' -> sb.append(c)
+                else -> sb.append('_')
+            }
+        }
+        return sb.toString()
     }
 
     private inner class Context(val jsFunction: JsFunction, val namespace: Namespace) : JsirRenderingContext {
