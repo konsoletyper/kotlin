@@ -49,7 +49,11 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         get
         private set
 
-    var container: JsirContainer = pool
+    var file: JsirFile? = null
+        get
+        private set
+
+    var container: JsirContainer? = null
         get
         private set
 
@@ -160,6 +164,20 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
             this.function = oldFunction
             declaration = oldDeclaration
             extensionParametersImpl.keys -= function
+        }
+    }
+
+    fun nestedFile(file: JsirFile, action: () -> Unit) {
+        val oldContainer = container
+        val oldFile = file
+        container = file
+        this.file = file
+        try {
+            action()
+        }
+        finally {
+            container = oldContainer
+            this.file = oldFile
         }
     }
 

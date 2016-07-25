@@ -22,28 +22,30 @@ import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.ir.*
 
 class ClassClosureTransformation {
-    fun apply(pool: JsirModule) {
+    fun apply(module: JsirModule) {
         val closureFields = mutableMapOf<ClassDescriptor, Set<JsirVariable>>()
-        for (cls in pool.classes.values) {
+        for (cls in module.classes.values) {
             val descriptor = cls.descriptor
             if (descriptor.containingDeclaration !is FunctionDescriptor) continue
-            val transformation = SingleClassClosureTransformation(pool, cls)
+            val transformation = SingleClassClosureTransformation(module, cls)
             transformation.apply(cls)
             transformation.addClosureFields()
             closureFields[descriptor] = transformation.closureFields
         }
-        applyToCallSites(closureFields, pool)
+        applyToCallSites(closureFields, module)
     }
 
-    fun applyToCallSites(closureFields: Map<ClassDescriptor, Set<JsirVariable>>, pool: JsirModule) {
-        for (function in (pool.functions.values + pool.classes.values.flatMap { it.functions.values })) {
+    fun applyToCallSites(closureFields: Map<ClassDescriptor, Set<JsirVariable>>, module: JsirModule) {
+        for (function in (module.topLevelFunctions + module.classes.values.flatMap { it.functions.values })) {
             applyToCallSites(closureFields, function.parameters.flatMap { it.defaultBody })
             applyToCallSites(closureFields, function.body)
         }
-        for (cls in pool.classes.values) {
+        for (cls in module.classes.values) {
             applyToCallSites(closureFields, cls.initializerBody)
         }
-        applyToCallSites(closureFields, pool.initializerBody)
+        for (file in module.files) {
+            applyToCallSites(closureFields, file.initializerBody)
+        }
     }
 
     fun applyToCallSites(closureFields: Map<ClassDescriptor, Set<JsirVariable>>, statements: List<JsirStatement>) {
@@ -71,7 +73,7 @@ class ClassClosureTransformation {
     }
 }
 
-private class SingleClassClosureTransformation(val pool: JsirModule, val root: JsirClass) : JsirMapper {
+private class SingleClassClosureTransformation(val module: JsirModule, val root: JsirClass) : JsirMapper {
     private var currentClass: JsirClass = root
     private var currentFunction: JsirFunction? = null
     val closureFields = mutableSetOf<JsirVariable>()
@@ -110,7 +112,7 @@ private class SingleClassClosureTransformation(val pool: JsirModule, val root: J
         action()
         for (innerDescriptor in descriptor.unsubstitutedInnerClassesScope.getContributedDescriptors()) {
             if (innerDescriptor is ClassDescriptor && innerDescriptor.isInner) {
-                apply(pool.classes[innerDescriptor]!!)
+                apply(module.classes[innerDescriptor]!!)
             }
         }
     }

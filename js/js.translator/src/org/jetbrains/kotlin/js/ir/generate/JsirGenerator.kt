@@ -197,8 +197,10 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     override fun visitKtFile(file: KtFile, data: JsirContext): JsirExpression {
-        for (declaration in file.declarations) {
-            context.generate(declaration)
+        context.nestedFile(JsirFile(context.pool, file.name)) {
+            for (declaration in file.declarations) {
+                context.generate(declaration)
+            }
         }
 
         return JsirExpression.Undefined
@@ -218,7 +220,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     private fun generateClass(psi: KtClassOrObject, descriptor: ClassDescriptor) {
-        val cls = JsirClass(descriptor, context.pool)
+        val cls = JsirClass(descriptor, context.file!!)
         val outerParameter = if (descriptor.isInner) JsirVariable("\$outer") else null
         val delegationGenerator = DelegationGenerator(context, psi, cls)
         context.nestedClass(cls, outerParameter) {
@@ -307,10 +309,10 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         }
         else {
             val variable = descriptor as VariableDescriptorWithAccessors
-            JsirProperty(variable, context.container)
+            JsirProperty(variable, context.container!!)
             val initializer = propertyPsi.initializer
             if (initializer != null) {
-                context.nestedBlock(context.container.initializerBody) {
+                context.nestedBlock(context.container!!.initializerBody) {
                     val receiver = if (variable.containingDeclaration is ClassDescriptor) JsirExpression.This else null
                     val access = JsirExpression.FieldAccess(receiver, JsirField.Backing(variable))
                     context.assign(access, context.generate(initializer))
@@ -330,7 +332,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             context.generate(psi)
         }
         else {
-            val function = JsirFunction(accessor, context.container, false)
+            val function = JsirFunction(accessor, context.container!!, false)
             val isGetter = accessor.valueParameters.isEmpty()
             val receiver = if (accessor.correspondingVariable.containingDeclaration is ClassDescriptor) {
                 JsirExpression.This
@@ -535,7 +537,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     override fun visitAnonymousInitializer(initializer: KtAnonymousInitializer, data: JsirContext?): JsirExpression {
-        context.nestedBlock(context.container.initializerBody) {
+        context.nestedBlock(context.container!!.initializerBody) {
             val body = initializer.body
             if (body != null) {
                 context.append(context.generate(body))
@@ -546,7 +548,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
 
     private fun generateFunctionDeclaration(functionPsi: KtDeclarationWithBody, static: Boolean): JsirExpression {
         val descriptor = context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, functionPsi] as FunctionDescriptor
-        val function = JsirFunction(descriptor, context.container, static)
+        val function = JsirFunction(descriptor, context.container!!, static)
 
         val extensionParameter = if (functionPsi.isExtensionDeclaration()) JsirVariable("\$receiver") else null
         if (extensionParameter != null) {
@@ -557,10 +559,10 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             val parameter = BindingUtils.getDescriptorForElement(context.bindingContext, parameterPsi) as ValueParameterDescriptor
             val property = context.bindingContext[BindingContext.VALUE_PARAMETER_AS_PROPERTY, parameter]
             if (property != null) {
-                JsirProperty(property, context.container)
+                JsirProperty(property, context.container!!)
                 generateAccessor(null, property.getter)
                 generateAccessor(null, property.setter)
-                context.nestedBlock(context.container.initializerBody) {
+                context.nestedBlock(context.container!!.initializerBody) {
                     val lhs = JsirExpression.FieldAccess(JsirExpression.This, JsirField.Backing(property))
                     context.assign(lhs, context.getVariable(parameter).get())
                 }
@@ -596,8 +598,8 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             context.nestedBlock(function.body) {
                 if (descriptor is ConstructorDescriptor) {
                     synthesizeSuperCall(descriptor)
-                    function.body += context.container.initializerBody
-                    context.container.initializerBody.clear()
+                    function.body += context.container!!.initializerBody
+                    context.container!!.initializerBody.clear()
                 }
 
                 val returnValue = functionPsi.bodyExpression?.let { context.generate(it) } ?: JsirExpression.Undefined

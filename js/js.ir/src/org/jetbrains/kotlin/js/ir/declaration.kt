@@ -61,7 +61,7 @@ class JsirProperty(val descriptor: VariableDescriptorWithAccessors, val containe
     }
 }
 
-class JsirClass(val descriptor: ClassDescriptor, val pool: JsirModule) : JsirContainer() {
+class JsirClass(val descriptor: ClassDescriptor, val file: JsirFile) : JsirContainer() {
     var hasOuterProperty = false
 
     val closureFields = mutableSetOf<JsirVariable>()
@@ -69,19 +69,43 @@ class JsirClass(val descriptor: ClassDescriptor, val pool: JsirModule) : JsirCon
     val delegateFields = mutableSetOf<JsirField.Delegate>()
 
     init {
-        pool.mutableClasses[descriptor] = this
+        file.mutableClasses[descriptor] = this
+        file.module.mutableClasses[descriptor] = this
     }
 
     fun delete() {
-        if (pool.mutableClasses[descriptor] == this) {
-            pool.mutableClasses.keys -= descriptor
+        if (file.mutableClasses[descriptor] == this) {
+            file.mutableClasses.keys -= descriptor
+            file.module.mutableClasses.keys -= descriptor
         }
     }
 }
 
-class JsirModule(val descriptor: ModuleDescriptor) : JsirContainer() {
+class JsirModule(val descriptor: ModuleDescriptor) {
+    val files: List<JsirFile>
+        get() = mutableFiles
+
     val classes: Map<ClassDescriptor, JsirClass>
         get() = mutableClasses
+
+    internal val mutableFiles = mutableListOf<JsirFile>()
+
+    internal val mutableClasses = mutableMapOf<ClassDescriptor, JsirClass>()
+
+    val topLevelFunctions: Sequence<JsirFunction>
+        get() = files.asSequence().flatMap { it.functions.values.asSequence() }
+
+    val topLevelProperties: Sequence<JsirProperty>
+        get() = files.asSequence().flatMap { it.properties.values.asSequence() }
+}
+
+class JsirFile(val module: JsirModule, val name: String) : JsirContainer() {
+    val classes: Map<ClassDescriptor, JsirClass>
+        get() = mutableClasses
+
+    init {
+        module.mutableFiles += this
+    }
 
     internal val mutableClasses = mutableMapOf<ClassDescriptor, JsirClass>()
 }

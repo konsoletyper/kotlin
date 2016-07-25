@@ -24,10 +24,12 @@ import org.jetbrains.kotlin.js.ir.transform.optimize.OptimizingTransformation
 class Transformer {
     val transformations = listOf(IntrinsicsTransformation(), OptimizingTransformation())
 
-    fun transform(pool: JsirModule) {
-        ClassClosureTransformation().apply(pool)
-        transformContainer(pool)
-        for (cls in pool.classes.values) {
+    fun transform(module: JsirModule) {
+        ClassClosureTransformation().apply(module)
+        for (file in module.files) {
+            transformContainer(file)
+        }
+        for (cls in module.classes.values) {
             transformContainer(cls)
         }
     }
