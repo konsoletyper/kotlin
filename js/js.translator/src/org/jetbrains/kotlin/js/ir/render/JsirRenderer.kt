@@ -41,13 +41,13 @@ class JsirRenderer {
     val functionFilters = mutableListOf<(JsirFunction) -> Boolean>()
     val externalNameContributors = mutableListOf<ExternalNameContributor>()
 
-    fun render(pool: JsirPool): JsProgram {
+    fun render(pool: JsirModule): JsProgram {
         val program = JsProgram("")
         val result = render(pool, program)
         val arguments = result.modules.map { makePlainModuleRef(it, program) }
 
         val invocation = JsInvocation(result.function, arguments)
-        val selfName = pool.module.importName
+        val selfName = pool.descriptor.importName
         val assignment = if (Namer.requiresEscaping(selfName)) {
             JsAstUtils.assignment(JsArrayAccess(JsLiteral.THIS, program.getStringLiteral(selfName)), invocation).makeStmt()
         }
@@ -59,7 +59,7 @@ class JsirRenderer {
         return program
     }
 
-    fun render(pool: JsirPool, program: JsProgram): JsirRenderingResult {
+    fun render(pool: JsirModule, program: JsProgram): JsirRenderingResult {
         val rendererImpl = JsirRendererImpl(pool, program).apply {
             invocationRenderers += this@JsirRenderer.invocationRenderers
             classFilters += this@JsirRenderer.classFilters
@@ -80,7 +80,7 @@ class JsirRenderer {
     }
 }
 
-private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
+private class JsirRendererImpl(val pool: JsirModule, val program: JsProgram) {
     val invocationRenderers = mutableListOf<InvocationRenderer>()
     val classFilters = mutableListOf<(JsirClass) -> Boolean>()
     val functionFilters = mutableListOf<(JsirFunction) -> Boolean>()
@@ -90,7 +90,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     val importsSection = mutableListOf<JsStatement>()
     val internalNameCache = mutableMapOf<DeclarationDescriptor, JsName>()
     val rootPackage = Package()
-    val module = pool.module
+    val module = pool.descriptor
     val moduleNames = mutableListOf<String>()
     val freeVariablesByFunction: Map<JsirFunction, Set<JsirVariable>>
     val descriptorToFunction: Map<FunctionDescriptor, JsirFunction>
@@ -103,14 +103,14 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     init {
         val allFunctions = (pool.functions.values.asSequence() + pool.classes.values.asSequence()
                 .flatMap { it.functions.values.asSequence() })
-        descriptorToFunction = allFunctions.map { it.declaration to it }.toMap()
+        descriptorToFunction = allFunctions.map { it.descriptor to it }.toMap()
         val freeVariablesByFunctionPrototype = allFunctions.map { it to mutableSetOf<JsirVariable>() }.toMap()
         fun propagateFreeVariables(function: JsirFunction, variables: Set<JsirVariable>) {
             val existing = freeVariablesByFunctionPrototype[function] ?: return
             val newVariables = variables - existing
             if (newVariables.isNotEmpty()) {
                 existing += newVariables
-                val outerFunctionDescriptor = function.declaration.containingDeclaration
+                val outerFunctionDescriptor = function.descriptor.containingDeclaration
                 if (outerFunctionDescriptor is FunctionDescriptor &&
                     DescriptorUtils.isDescriptorWithLocalVisibility(outerFunctionDescriptor)
                 ) {
@@ -127,7 +127,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
 
     fun render(): JsFunction {
         for (property in pool.properties.values) {
-            wrapperFunction.body.statements += JsVars(JsVars.JsVar(getInternalName(property.declaration)))
+            wrapperFunction.body.statements += JsVars(JsVars.JsVar(getInternalName(property.descriptor)))
         }
 
         for (cls in pool.classes.values) {
@@ -138,7 +138,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         for (function in pool.functions.values) {
             if (functionFilters.any { !it(function) }) continue
             val jsFunction = renderFunction(function)
-            jsFunction.name = getInternalName(function.declaration)
+            jsFunction.name = getInternalName(function.descriptor)
             wrapperFunction.body.statements += jsFunction.makeStmt()
         }
 
@@ -171,7 +171,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     }
 
     fun renderClass(cls: JsirClass) {
-        val descriptor = cls.declaration
+        val descriptor = cls.descriptor
         val constructorName = getInternalName(descriptor)
         val jsConstructor = JsFunction(wrapperFunction.scope, JsBlock(), descriptor.toString())
         jsConstructor.name = constructorName
@@ -179,7 +179,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         val context = Context(jsConstructor, Namespace(rootNamespace))
 
         if (descriptor.isInner) {
-            outerFieldNames[cls.declaration] = program.scope.declareName("outer\$${getSuggestedName(descriptor)}")
+            outerFieldNames[cls.descriptor] = program.scope.declareName("outer\$${getSuggestedName(descriptor)}")
         }
 
         for (delegateField in cls.delegateFields) {
@@ -191,7 +191,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         }
 
         val primaryConstructorDescriptor = cls.functions.values.asSequence()
-                .map { it.declaration }
+                .map { it.descriptor }
                 .firstOrNull { it is ConstructorDescriptor && it.isPrimary }
         val parameterVariables = mutableSetOf<JsirVariable>()
         if (primaryConstructorDescriptor != null) {
@@ -225,20 +225,20 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
         for (function in cls.functions.values) {
             if (functionFilters.any { !it(function) }) continue
 
-            val declaration = function.declaration
+            val declaration = function.descriptor
             if (declaration is ConstructorDescriptor && declaration.isPrimary) continue
 
-            val lhs = JsNameRef(getInternalName(function.declaration), makePrototype(constructorName))
+            val lhs = JsNameRef(getInternalName(function.descriptor), makePrototype(constructorName))
             wrapperFunction.body.statements += JsAstUtils.assignment(lhs, renderFunction(function)).makeStmt()
         }
 
         closureFieldNames.clear()
         delegateFieldNames.clear()
-        outerFieldNames.keys -= cls.declaration
+        outerFieldNames.keys -= cls.descriptor
     }
 
     fun renderInterfaceDefaultMethods(cls: JsirClass) {
-        val descriptor = cls.declaration
+        val descriptor = cls.descriptor
         val members = descriptor.unsubstitutedMemberScope.getContributedDescriptors(DescriptorKindFilter.CALLABLES)
                 .asSequence()
                 .filterIsInstance<CallableMemberDescriptor>()
@@ -272,12 +272,12 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     fun renderFunction(function: JsirFunction): JsFunction {
         val freeVariables = getFreeVariables(function)
 
-        val context = Context(JsFunction(wrapperFunction.scope, JsBlock(), function.declaration.toString()), Namespace(rootNamespace))
+        val context = Context(JsFunction(wrapperFunction.scope, JsBlock(), function.descriptor.toString()), Namespace(rootNamespace))
         val result = if (freeVariables.isEmpty()) {
             renderRawFunction(function, wrapperFunction.scope, emptyMap(), context)
         }
         else {
-            val constructor = JsFunction(wrapperFunction.scope, JsBlock(), "closure constructor: ${function.declaration}")
+            val constructor = JsFunction(wrapperFunction.scope, JsBlock(), "closure constructor: ${function.descriptor}")
             val freeVariableNames = mutableMapOf<JsirVariable, JsName>()
             for (freeVariable in freeVariables) {
                 val suggestedName = freeVariable.suggestedName ?: "closure\$tmp"
@@ -297,7 +297,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
 
     fun renderRawFunction(
             function: JsirFunction, scope: JsScope, freeVariables: Map<JsirVariable, JsName>,
-            context: Context = Context(JsFunction(scope, JsBlock(), function.declaration.toString()), Namespace(rootNamespace))
+            context: Context = Context(JsFunction(scope, JsBlock(), function.descriptor.toString()), Namespace(rootNamespace))
     ): JsFunction {
         val jsFunction = context.jsFunction
         context.variableNames += freeVariables
@@ -338,7 +338,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
 
     fun exportTopLevel() {
         for (function in pool.functions.values) {
-            val descriptor = function.declaration
+            val descriptor = function.descriptor
             if (descriptor is VariableAccessorDescriptor || !descriptor.isEffectivelyPublicApi) continue
             val container = descriptor.containingDeclaration as? PackageFragmentDescriptor ?: continue
             if (functionFilters.any { !it(function) }) continue
@@ -349,7 +349,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
             jsPackage.jsObject.propertyInitializers += JsPropertyInitializer(key, getInternalName(descriptor).makeRef())
         }
         for (cls in pool.classes.values) {
-            val descriptor = cls.declaration
+            val descriptor = cls.descriptor
             if (descriptor.containingDeclaration.containingDeclaration !is PackageFragmentDescriptor) continue
             if (!descriptor.isEffectivelyPublicApi) continue
             if (classFilters.any { !it(cls) }) continue
@@ -363,7 +363,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
 
     fun exportTopLevelProperties() {
         for (property in pool.properties.values) {
-            val descriptor = property.declaration
+            val descriptor = property.descriptor
             if (!descriptor.isEffectivelyPublicApi) continue
             if (!applyFilter(property)) continue
 
@@ -385,7 +385,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
     }
 
     private fun applyFilter(property: JsirProperty): Boolean {
-        val descriptor = property.declaration
+        val descriptor = property.descriptor
         for (accessor in descriptor.getter.singletonOrEmptyList() + descriptor.setter.singletonOrEmptyList()) {
             val function = pool.functions[accessor]
             if (function != null && functionFilters.any { !it(function) }) return false
@@ -485,7 +485,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
                 internalNameCache[descriptor] = name
                 if (descriptor !is ModuleDescriptor && import) {
                     val module = DescriptorUtils.getContainingModule(descriptor)
-                    if (module != pool.module) {
+                    if (module != pool.descriptor) {
                         importsSection += JsVars(JsVars.JsVar(name, getExternalName(descriptor)))
                     }
                 }
@@ -511,7 +511,7 @@ private class JsirRendererImpl(val pool: JsirPool, val program: JsProgram) {
 
     private fun generateInternalName(descriptor: DeclarationDescriptor): JsName {
         if (descriptor is ModuleDescriptor) {
-            return if (descriptor == pool.module) {
+            return if (descriptor == pool.descriptor) {
                 program.scope.declareName(rootNamespace.generateFreshName("_"))
             }
             else {

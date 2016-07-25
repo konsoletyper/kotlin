@@ -22,7 +22,7 @@ import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils
 
 class NativeFunctionFilter : (JsirFunction) -> Boolean {
     override fun invoke(function: JsirFunction): Boolean {
-        val descriptor = function.declaration
+        val descriptor = function.descriptor
         if (AnnotationsUtils.isNativeObject(descriptor)) return false
         if (descriptor is VariableAccessorDescriptor && AnnotationsUtils.isNativeObject(descriptor.correspondingVariable)) return false
         return true

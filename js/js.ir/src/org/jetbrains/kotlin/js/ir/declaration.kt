@@ -30,17 +30,17 @@ sealed class JsirContainer {
     internal val mutableProperties = mutableMapOf<VariableDescriptorWithAccessors, JsirProperty>()
 }
 
-class JsirFunction(val declaration: FunctionDescriptor, val container: JsirContainer, val static: Boolean) {
+class JsirFunction(val descriptor: FunctionDescriptor, val container: JsirContainer, val static: Boolean) {
     val parameters = mutableListOf<JsirParameter>()
     val body = mutableListOf<JsirStatement>()
 
     init {
-        container.mutableFunctions[declaration] = this
+        container.mutableFunctions[descriptor] = this
     }
 
     fun delete() {
-        if (container.mutableFunctions[declaration] == this) {
-            container.mutableFunctions.keys -= declaration
+        if (container.mutableFunctions[descriptor] == this) {
+            container.mutableFunctions.keys -= descriptor
         }
     }
 }
@@ -49,19 +49,19 @@ class JsirParameter(val variable: JsirVariable) {
     val defaultBody = mutableListOf<JsirStatement>()
 }
 
-class JsirProperty(val declaration: VariableDescriptorWithAccessors, val container: JsirContainer) {
+class JsirProperty(val descriptor: VariableDescriptorWithAccessors, val container: JsirContainer) {
     init {
-        container.mutableProperties[declaration] = this
+        container.mutableProperties[descriptor] = this
     }
 
     fun delete() {
-        if (container.mutableProperties[declaration] == this) {
-            container.mutableProperties.keys -= declaration
+        if (container.mutableProperties[descriptor] == this) {
+            container.mutableProperties.keys -= descriptor
         }
     }
 }
 
-class JsirClass(val declaration: ClassDescriptor, val pool: JsirPool) : JsirContainer() {
+class JsirClass(val descriptor: ClassDescriptor, val pool: JsirModule) : JsirContainer() {
     var hasOuterProperty = false
 
     val closureFields = mutableSetOf<JsirVariable>()
@@ -69,17 +69,17 @@ class JsirClass(val declaration: ClassDescriptor, val pool: JsirPool) : JsirCont
     val delegateFields = mutableSetOf<JsirField.Delegate>()
 
     init {
-        pool.mutableClasses[declaration] = this
+        pool.mutableClasses[descriptor] = this
     }
 
     fun delete() {
-        if (pool.mutableClasses[declaration] == this) {
-            pool.mutableClasses.keys -= declaration
+        if (pool.mutableClasses[descriptor] == this) {
+            pool.mutableClasses.keys -= descriptor
         }
     }
 }
 
-class JsirPool(val module: ModuleDescriptor) : JsirContainer() {
+class JsirModule(val descriptor: ModuleDescriptor) : JsirContainer() {
     val classes: Map<ClassDescriptor, JsirClass>
         get() = mutableClasses
 

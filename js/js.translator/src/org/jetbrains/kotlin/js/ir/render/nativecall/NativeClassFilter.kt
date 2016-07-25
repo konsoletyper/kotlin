@@ -20,5 +20,5 @@ import org.jetbrains.kotlin.js.ir.JsirClass
 import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils
 
 class NativeClassFilter : (JsirClass) -> Boolean {
-    override fun invoke(cls: JsirClass) = !AnnotationsUtils.isNativeObject(cls.declaration)
+    override fun invoke(cls: JsirClass) = !AnnotationsUtils.isNativeObject(cls.descriptor)
 }

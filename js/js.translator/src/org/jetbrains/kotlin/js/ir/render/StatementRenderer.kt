@@ -309,7 +309,7 @@ class StatementRenderer(val context: JsirRenderingContext) {
             val calleeContainer = callee.container
             val freeVariables = context.getFreeVariables(callee).orEmpty()
             val reference: JsExpression = if (calleeContainer is JsirClass) {
-                val staticRef = pureFqn("prototype", pureFqn(context.getInternalName(calleeContainer.declaration), null))
+                val staticRef = pureFqn("prototype", pureFqn(context.getInternalName(calleeContainer.descriptor), null))
                 JsInvocation(pureFqn("bind", pureFqn(context.getInternalName(function), staticRef)), JsLiteral.THIS)
             }
             else {

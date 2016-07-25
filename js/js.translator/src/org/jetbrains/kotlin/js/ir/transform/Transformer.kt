@@ -17,14 +17,14 @@
 package org.jetbrains.kotlin.js.ir.transform
 
 import org.jetbrains.kotlin.js.ir.JsirContainer
-import org.jetbrains.kotlin.js.ir.JsirPool
+import org.jetbrains.kotlin.js.ir.JsirModule
 import org.jetbrains.kotlin.js.ir.transform.intrinsics.IntrinsicsTransformation
 import org.jetbrains.kotlin.js.ir.transform.optimize.OptimizingTransformation
 
 class Transformer {
     val transformations = listOf(IntrinsicsTransformation(), OptimizingTransformation())
 
-    fun transform(pool: JsirPool) {
+    fun transform(pool: JsirModule) {
         ClassClosureTransformation().apply(pool)
         transformContainer(pool)
         for (cls in pool.classes.values) {

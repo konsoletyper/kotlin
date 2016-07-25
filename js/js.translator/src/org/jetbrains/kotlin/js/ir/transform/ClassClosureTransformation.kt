@@ -22,10 +22,10 @@ import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.ir.*
 
 class ClassClosureTransformation {
-    fun apply(pool: JsirPool) {
+    fun apply(pool: JsirModule) {
         val closureFields = mutableMapOf<ClassDescriptor, Set<JsirVariable>>()
         for (cls in pool.classes.values) {
-            val descriptor = cls.declaration
+            val descriptor = cls.descriptor
             if (descriptor.containingDeclaration !is FunctionDescriptor) continue
             val transformation = SingleClassClosureTransformation(pool, cls)
             transformation.apply(cls)
@@ -35,7 +35,7 @@ class ClassClosureTransformation {
         applyToCallSites(closureFields, pool)
     }
 
-    fun applyToCallSites(closureFields: Map<ClassDescriptor, Set<JsirVariable>>, pool: JsirPool) {
+    fun applyToCallSites(closureFields: Map<ClassDescriptor, Set<JsirVariable>>, pool: JsirModule) {
         for (function in (pool.functions.values + pool.classes.values.flatMap { it.functions.values })) {
             applyToCallSites(closureFields, function.parameters.flatMap { it.defaultBody })
             applyToCallSites(closureFields, function.body)
@@ -71,7 +71,7 @@ class ClassClosureTransformation {
     }
 }
 
-private class SingleClassClosureTransformation(val pool: JsirPool, val root: JsirClass) : JsirMapper {
+private class SingleClassClosureTransformation(val pool: JsirModule, val root: JsirClass) : JsirMapper {
     private var currentClass: JsirClass = root
     private var currentFunction: JsirFunction? = null
     val closureFields = mutableSetOf<JsirVariable>()
@@ -89,7 +89,7 @@ private class SingleClassClosureTransformation(val pool: JsirPool, val root: Jsi
 
     fun addClosureFields() {
         root.closureFields += closureFields
-        for (constructorDescriptor in root.declaration.constructors) {
+        for (constructorDescriptor in root.descriptor.constructors) {
             val constructor = root.functions[constructorDescriptor] ?: continue
             val statements = mutableListOf<JsirStatement>()
             val parameters = mutableListOf<JsirParameter>()
@@ -106,7 +106,7 @@ private class SingleClassClosureTransformation(val pool: JsirPool, val root: Jsi
     }
 
     private fun process(cls: JsirClass, action: () -> Unit) {
-        val descriptor = cls.declaration
+        val descriptor = cls.descriptor
         action()
         for (innerDescriptor in descriptor.unsubstitutedInnerClassesScope.getContributedDescriptors()) {
             if (innerDescriptor is ClassDescriptor && innerDescriptor.isInner) {
@@ -129,8 +129,8 @@ private class SingleClassClosureTransformation(val pool: JsirPool, val root: Jsi
 
     private fun getReceiver(): JsirExpression {
         var receiver: JsirExpression = JsirExpression.This
-        var cls = currentClass.declaration
-        while (cls != root.declaration) {
+        var cls = currentClass.descriptor
+        while (cls != root.descriptor) {
             receiver = JsirExpression.FieldAccess(receiver, JsirField.OuterClass(cls))
             cls = cls.containingDeclaration as ClassDescriptor
         }
