@@ -82,6 +82,8 @@ sealed class JsirExpression {
 
     class Cast(var value: JsirExpression, var type: KotlinType) : JsirExpression()
 
+    class PrimitiveCast(var value: JsirExpression, var sourceType: JsirType, var targetType: JsirType) : JsirExpression()
+
     class NewNullPointerExpression : JsirExpression()
 }
 

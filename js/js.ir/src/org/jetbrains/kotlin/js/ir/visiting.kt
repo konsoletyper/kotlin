@@ -114,6 +114,9 @@ fun <S, E> JsirExpression.visit(visitor: JsirVisitor<S, E>): E = visitor.accept(
     is JsirExpression.Cast -> ({
         value.visit(visitor)
     })
+    is JsirExpression.PrimitiveCast -> ({
+        value.visit(visitor)
+    })
 
     is JsirExpression.NewNullPointerExpression,
     is JsirExpression.VariableReference,
@@ -261,6 +264,10 @@ fun JsirExpression.replace(mapper: JsirMapper): JsirExpression = when (this) {
         value = value.replace(mapper)
         mapper.map(this)
     }
+    is JsirExpression.PrimitiveCast -> {
+        value = value.replace(mapper)
+        mapper.map(this)
+    }
 }
 
 @JvmName("replaceStatements")
@@ -300,7 +307,7 @@ private fun MutableList<JsirStatement.Assignment>.replaceAssignments(mapper: Jsi
     val iterator = listIterator()
     while (iterator.hasNext()) {
         val initialStatement = iterator.next()
-        val statement = mapper.map(initialStatement, false)
+        val statement = initialStatement.replace(mapper, false)
         if (statement == null) {
             iterator.remove()
         }

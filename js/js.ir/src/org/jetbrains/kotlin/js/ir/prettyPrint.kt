@@ -238,6 +238,11 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
             value.prettyPrint(writer)
         }
     }
+    is JsirExpression.PrimitiveCast -> {
+        writer.block("primitive-cast '$sourceType' '$targetType'") {
+            value.prettyPrint(writer)
+        }
+    }
 
     is JsirExpression.Constant -> {
         val value = this.value

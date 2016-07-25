@@ -324,6 +324,9 @@ private class Implementation(val body: MutableList<JsirStatement>) {
                     expression.value.visit(this)
                     true
                 }
+                is JsirExpression.PrimitiveCast -> {
+                    expression.value.visit(this)
+                }
                 is JsirExpression.InstanceOf -> expression.value.visit(this)
 
                 is JsirExpression.NewNullPointerExpression -> false

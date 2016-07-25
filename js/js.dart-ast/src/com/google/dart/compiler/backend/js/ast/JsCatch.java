@@ -46,6 +46,10 @@ public class JsCatch extends SourceInfoAwareJsNode implements HasCondition {
         return param;
     }
 
+    public void setParameter(JsParameter param) {
+        this.param = param;
+    }
+
     public JsScope getScope() {
         return scope;
     }

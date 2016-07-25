@@ -125,7 +125,8 @@ class StatementRenderer(val context: JsirRenderingContext) {
             jsTry.tryBlock.statements += render(statement.body)
             if (statement.catchClauses.isNotEmpty()) {
                 val jsCatch = JsCatch(context.scope, "\$tmp", JsBlock())
-                val jsCatchVar = jsCatch.parameter.name
+                val jsCatchVar = context.scope.declareFreshName("\$tmp")
+                jsCatch.parameter = JsParameter(jsCatchVar)
 
                 var defaultCatchExists = false
                 var appendNextStatement = { statement: JsStatement -> jsCatch.body.statements += statement }
@@ -220,7 +221,15 @@ class StatementRenderer(val context: JsirRenderingContext) {
                     val kotlinName = context.kotlinName()
                     JsInvocation(pureFqn("compare", pureFqn(kotlinName, null)), left, right)
                 }
-                else -> JsBinaryOperation(expression.operation.asJs(), left, right)
+                JsirBinaryOperation.REF_EQ,
+                JsirBinaryOperation.REF_NE,
+                JsirBinaryOperation.EQ,
+                JsirBinaryOperation.NE,
+                JsirBinaryOperation.GT,
+                JsirBinaryOperation.GOE,
+                JsirBinaryOperation.LT,
+                JsirBinaryOperation.LOE -> JsBinaryOperation(expression.operation.asJs(), left, right)
+                else -> wrapIntegerOperation(expression.type, JsBinaryOperation(expression.operation.asJs(), left, right))
             }
             result
         }
@@ -381,6 +390,9 @@ class StatementRenderer(val context: JsirRenderingContext) {
             val test = context.renderInstanceOf(JsAstUtils.assignment(variable.makeRef(), render(expression.value)), expression.type)
             JsConditional(test, variable.makeRef(), JsInvocation(context.kotlinReference("throwCCE")))
         }
+        is JsirExpression.PrimitiveCast -> {
+            primitiveCast(render(expression.value), expression.sourceType, expression.targetType)
+        }
     }
 
     private fun JsirBinaryOperation.asJs() = when (this) {
@@ -409,6 +421,67 @@ class StatementRenderer(val context: JsirRenderingContext) {
         JsirBinaryOperation.COMPARE,
         JsirBinaryOperation.EQUALS_METHOD,
         JsirBinaryOperation.ARRAY_GET -> error("Can't express $this as binary operation in AST")
+    }
+
+    private fun wrapIntegerOperation(type: JsirType, expression: JsExpression): JsExpression {
+        return if (type == JsirType.INT) {
+            JsBinaryOperation(JsBinaryOperator.BIT_OR, expression, context.getNumberLiteral(0))
+        }
+        else {
+            expression
+        }
+    }
+
+    private fun primitiveCast(value: JsExpression, from: JsirType, to: JsirType): JsExpression {
+        return when (from) {
+            JsirType.INT,
+            JsirType.LONG -> when (to) {
+                JsirType.BOOLEAN,
+                JsirType.BYTE -> {
+                    val amount = context.getNumberLiteral(16)
+                    JsBinaryOperation(JsBinaryOperator.SHR, JsBinaryOperation(JsBinaryOperator.SHL, value, amount), amount)
+                }
+                JsirType.SHORT -> {
+                    val amount = context.getNumberLiteral(16)
+                    JsBinaryOperation(JsBinaryOperator.SHR, JsBinaryOperation(JsBinaryOperator.SHL, value, amount), amount)
+                }
+
+                JsirType.ANY,
+                JsirType.INT,
+                JsirType.FLOAT,
+                JsirType.DOUBLE,
+                JsirType.CHAR,
+                JsirType.LONG -> value
+            }
+            JsirType.BOOLEAN,
+            JsirType.CHAR,
+            JsirType.BYTE,
+            JsirType.SHORT -> when (to) {
+                JsirType.BOOLEAN,
+                JsirType.BYTE,
+                JsirType.SHORT,
+                JsirType.ANY,
+                JsirType.INT,
+                JsirType.FLOAT,
+                JsirType.DOUBLE,
+                JsirType.CHAR,
+                JsirType.LONG -> value
+            }
+            JsirType.FLOAT,
+            JsirType.DOUBLE -> when (to) {
+                JsirType.BOOLEAN,
+                JsirType.BYTE,
+                JsirType.SHORT,
+                JsirType.INT,
+                JsirType.CHAR,
+                JsirType.LONG -> JsBinaryOperation(JsBinaryOperator.BIT_OR, value, context.getNumberLiteral(0))
+                JsirType.ANY,
+                JsirType.FLOAT,
+                JsirType.DOUBLE -> value
+            }
+
+            JsirType.ANY -> value
+        }
     }
 
     @JvmName("renderStatements")
