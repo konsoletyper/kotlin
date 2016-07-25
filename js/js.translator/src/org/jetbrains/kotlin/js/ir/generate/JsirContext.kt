@@ -32,7 +32,7 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
     private val labeledStatements = mutableMapOf<String, JsirLabeled>()
     private val continueReplacementsImpl = mutableMapOf<JsirLabeled, JsirLabeled>()
     private val extensionParametersImpl = mutableMapOf<FunctionDescriptor, JsirVariable?>()
-    val pool = JsirModule(module)
+    val module = JsirModule(module)
 
     val bindingContext: BindingContext
         get() = bindingTrace.bindingContext

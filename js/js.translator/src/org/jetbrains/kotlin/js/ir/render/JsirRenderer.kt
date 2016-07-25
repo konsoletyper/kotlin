@@ -41,13 +41,13 @@ class JsirRenderer {
     val functionFilters = mutableListOf<(JsirFunction) -> Boolean>()
     val externalNameContributors = mutableListOf<ExternalNameContributor>()
 
-    fun render(pool: JsirModule): JsProgram {
+    fun render(module: JsirModule): JsProgram {
         val program = JsProgram("")
-        val result = render(pool, program)
+        val result = render(module, program)
         val arguments = result.modules.map { makePlainModuleRef(it, program) }
 
         val invocation = JsInvocation(result.function, arguments)
-        val selfName = pool.descriptor.importName
+        val selfName = module.descriptor.importName
         val assignment = if (Namer.requiresEscaping(selfName)) {
             JsAstUtils.assignment(JsArrayAccess(JsLiteral.THIS, program.getStringLiteral(selfName)), invocation).makeStmt()
         }
@@ -59,8 +59,8 @@ class JsirRenderer {
         return program
     }
 
-    fun render(pool: JsirModule, program: JsProgram): JsirRenderingResult {
-        val rendererImpl = JsirRendererImpl(pool, program).apply {
+    fun render(module: JsirModule, program: JsProgram): JsirRenderingResult {
+        val rendererImpl = JsirRendererImpl(module, program).apply {
             invocationRenderers += this@JsirRenderer.invocationRenderers
             classFilters += this@JsirRenderer.classFilters
             functionFilters += this@JsirRenderer.functionFilters

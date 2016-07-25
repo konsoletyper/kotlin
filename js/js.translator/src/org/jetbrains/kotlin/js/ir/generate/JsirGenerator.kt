@@ -197,7 +197,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     override fun visitKtFile(file: KtFile, data: JsirContext): JsirExpression {
-        context.nestedFile(JsirFile(context.pool, file.name)) {
+        context.nestedFile(JsirFile(context.module, file.name)) {
             for (declaration in file.declarations) {
                 context.generate(declaration)
             }

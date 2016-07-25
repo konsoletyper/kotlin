@@ -96,7 +96,7 @@ public final class K2JSTranslator {
         for (KtFile file : files) {
             file.accept(irGenerator, irGenerator.getContext());
         }
-        JsirModule pool = irGenerator.getContext().getPool();
+        JsirModule pool = irGenerator.getContext().getModule();
         Transformer transformer = new Transformer();
         transformer.transform(pool);
 
@@ -111,7 +111,7 @@ public final class K2JSTranslator {
         renderer.getExternalNameContributors().add(new BuiltinNameContributor(
                 StandardClasses.bindImplementations(new JsObjectScope(new JsProgram("").getRootScope(), "", null))));
         renderer.getExternalNameContributors().add(new NativeNameContributor());
-        JsProgram altProgram = renderer.render(irGenerator.getContext().getPool());
+        JsProgram altProgram = renderer.render(irGenerator.getContext().getModule());
         /*altProgram.getGlobalBlock().accept(new RecursiveJsVisitor() {
             @Override
             public void visitFunction(@NotNull JsFunction x) {
