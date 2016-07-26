@@ -29,7 +29,7 @@ import org.jetbrains.kotlin.types.KotlinType
 internal fun JsirContext.generateWhen(psi: KtWhenExpression): JsirExpression {
     val subjectPsi = psi.subjectExpression
     val subject = subjectPsi?.let { memoize(it) }
-    val result = JsirVariable().makeReference()
+    val result = newTemporary().makeReference()
 
     var exit: (() -> Unit)? = null
     for (entryPsi in psi.entries) {
@@ -41,7 +41,7 @@ internal fun JsirContext.generateWhen(psi: KtWhenExpression): JsirExpression {
                 generateWhenCondition(subject, subjectPsi, entryPsi.conditions[0])
             }
             else {
-                val temporary = JsirVariable().makeReference()
+                val temporary = newTemporary().makeReference()
                 assign(temporary, generateWhenCondition(subject, subjectPsi, entryPsi.conditions.first()))
                 for (conditionPsi in entryPsi.conditions.drop(1)) {
                     val conditional = JsirStatement.If(temporary.negate())

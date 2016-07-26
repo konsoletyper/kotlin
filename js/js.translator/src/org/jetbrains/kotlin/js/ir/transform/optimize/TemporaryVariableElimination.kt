@@ -21,8 +21,8 @@ import org.jetbrains.kotlin.utils.singletonOrEmptyList
 import kotlin.reflect.KClass
 
 class TemporaryVariableElimination : Optimization {
-    override fun apply(parameters: List<JsirVariable>, body: MutableList<JsirStatement>): List<KClass<out Optimization>> {
-        val implementation = Implementation(body)
+    override fun apply(variableContainer: JsirVariableContainer, body: MutableList<JsirStatement>): List<KClass<out Optimization>> {
+        val implementation = Implementation(variableContainer, body)
         implementation.analyze()
         implementation.perform()
         implementation.cleanUp()
@@ -35,7 +35,7 @@ class TemporaryVariableElimination : Optimization {
     }
 }
 
-private class Implementation(val body: MutableList<JsirStatement>) {
+private class Implementation(val variableContainer: JsirVariableContainer, val body: MutableList<JsirStatement>) {
     private val definitions = mutableMapOf<JsirVariable, Int>()
     private val definedValues = mutableMapOf<JsirVariable, JsirExpression>()
     private val usages = mutableMapOf<JsirVariable, Int>()
@@ -61,7 +61,7 @@ private class Implementation(val body: MutableList<JsirStatement>) {
                     is JsirStatement.Assignment -> {
                         val left = statement.left
                         if (left is JsirExpression.VariableReference) {
-                            val definitionCount = if (left.free) 2 else 1
+                            val definitionCount = if (left.variable in variableContainer.variables) 1 else 2
                             definitions[left.variable] = definitionCount + (definitions[left.variable] ?: 0)
                             definedValues[left.variable] = statement.right
                             statement.right.visit(this)
@@ -257,6 +257,10 @@ private class Implementation(val body: MutableList<JsirStatement>) {
                 else -> expression
             }
         })
+
+        for (variable in variablesToSubstitute + variablesToRemove) {
+            variable.delete()
+        }
     }
 
     private inner class SubstitutionCandidateFinder : JsirVisitor<Unit, Boolean> {
@@ -359,7 +363,7 @@ private class Implementation(val body: MutableList<JsirStatement>) {
         is JsirExpression.VariableReference -> {
             val variable = expression.variable
             when (definitions[variable]) {
-                null, 0 -> expression.free
+                null, 0 -> expression.variable in variableContainer.variables
                 1 -> variable !in variablesToSubstitute || definedValues[variable]?.let { isTrivial(it) } ?: false
                 else -> false
             }

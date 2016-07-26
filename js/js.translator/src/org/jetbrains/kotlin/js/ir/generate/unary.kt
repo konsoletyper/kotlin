@@ -66,7 +66,7 @@ private fun JsirContext.generateIncrement(expression: KtUnaryExpression): JsirEx
     val receiverFactory = { variable.get() }
 
     return if (expression is KtPostfixExpression) {
-        val temporary = JsirVariable().makeReference()
+        val temporary = newTemporary().makeReference()
         assign(temporary, variable.get())
         variable.set(generateInvocation(resolvedCall, { listOf(listOf(temporary)) }, receiverFactory))
         temporary

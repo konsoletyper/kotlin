@@ -198,7 +198,8 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
         wrapperFunction.body.statements += jsConstructor.makeStmt()
         val context = Context(jsConstructor, Namespace(rootNamespace))
 
-        if (descriptor.isInner) {
+        val outerClass = cls.outer
+        if (outerClass != null) {
             outerFieldNames[cls.descriptor] = program.scope.declareName("outer\$${getSuggestedName(descriptor)}")
         }
 

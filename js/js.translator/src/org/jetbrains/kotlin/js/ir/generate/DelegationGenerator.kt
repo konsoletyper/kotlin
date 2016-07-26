@@ -101,8 +101,13 @@ internal class DelegationGenerator(val context: JsirContext, val psi: KtClassOrO
             field : JsirField
     ) {
         val function = JsirFunction(descriptor, cls, static = false)
-        val extensionParameter = if (descriptor.isExtension) JsirVariable("\$receiver") else null
-        context.nestedFunction(descriptor, null) {
+        val extensionParameter = if (descriptor.isExtension) {
+            function.variableContainer.createVariable(false, "\$receiver")
+        }
+        else {
+            null
+        }
+        context.nestedFunction(function, null, null) {
             context.nestedBlock(function.body) {
                 val parameters = extensionParameter.singletonOrEmptyList() +
                                  descriptor.valueParameters.map { context.getVariable(it).localVariable }

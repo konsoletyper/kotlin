@@ -41,11 +41,17 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         get
         private set
 
-    var function: FunctionDescriptor? = null
+    var function: JsirFunction? = null
         get
         private set
 
-    var classDescriptor: ClassDescriptor? = null
+    private val functions = mutableMapOf<FunctionDescriptor, JsirFunction>()
+
+    var variableContainer: JsirVariableContainer? = null
+        get
+        private set
+
+    var classDescriptor: JsirClass? = null
         get
         private set
 
@@ -112,26 +118,16 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
 
     fun getVariable(descriptor: VariableDescriptor): LocalVariableAccessor {
         val container = descriptor.containingDeclaration
-        val containingFunction = if (container !is FunctionDescriptor) {
-            if (container.containingDeclaration is PackageFragmentDescriptor) {
-                null
-            }
-            else {
-                throw IllegalArgumentException("Can only get accessor for local variables. $descriptor is not a local variable")
-            }
-        }
-        else {
-            container
-        }
 
         val localVar = localVariables.getOrPut(descriptor) {
-            val result = JsirVariable(if (!descriptor.name.isSpecial) descriptor.name.asString() else null)
-            if (container == function) {
+            val name = if (!descriptor.name.isSpecial) descriptor.name.asString() else null
+            val result = variableContainer!!.createVariable(descriptor.isVar, name)
+            if (container == function?.descriptor) {
                 declaredLocalVariables.add(descriptor)
             }
             result
         }
-        return LocalVariableAccessor(localVar, containingFunction)
+        return LocalVariableAccessor(localVar)
     }
 
     fun nestedBlock(body: MutableList<JsirStatement>, action: () -> Unit) {
@@ -150,12 +146,17 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         return { resultingStatements = backup }
     }
 
-    fun nestedFunction(function: FunctionDescriptor, extensionParameter: JsirVariable?, action: () -> Unit) {
+    fun nestedFunction(function: JsirFunction, extensionParameter: JsirVariable?, outerParameter: JsirVariable?, action: () -> Unit) {
         val oldFunction = this.function
         val oldDeclaration = declaration
+        val oldVariableContainer = variableContainer
+        val oldOuterParameter = outerParameter
         this.function = function
-        declaration = function
-        extensionParametersImpl[function] = extensionParameter
+        this.outerParameter = outerParameter
+        declaration = function.descriptor
+        extensionParametersImpl[function.descriptor] = extensionParameter
+        variableContainer = JsirVariableContainer.Function(function)
+        functions[function.descriptor] = function
 
         try {
             nestedVariableScope(action)
@@ -163,21 +164,27 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         finally {
             this.function = oldFunction
             declaration = oldDeclaration
-            extensionParametersImpl.keys -= function
+            extensionParametersImpl.keys -= function.descriptor
+            variableContainer = oldVariableContainer
+            functions.keys -= function.descriptor
+            this.outerParameter = oldOuterParameter
         }
     }
 
     fun nestedFile(file: JsirFile, action: () -> Unit) {
         val oldContainer = container
         val oldFile = file
+        val oldVariableContainer = variableContainer
         container = file
         this.file = file
+        variableContainer = JsirVariableContainer.Initializer(file)
         try {
             action()
         }
         finally {
             container = oldContainer
             this.file = oldFile
+            variableContainer = oldVariableContainer
         }
     }
 
@@ -193,15 +200,15 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         }
     }
 
-    fun nestedClass(cls: JsirClass, outerParameter: JsirVariable?, action: () -> Unit) {
+    fun nestedClass(cls: JsirClass, action: () -> Unit) {
         val oldClass = classDescriptor
         val oldDeclaration = declaration
         val oldContainer = container
-        val oldOuterParameter = this.outerParameter
-        classDescriptor = cls.descriptor
+        val oldVariableContainer = variableContainer
+        classDescriptor = cls
         declaration = cls.descriptor
         container = cls
-        this.outerParameter = outerParameter
+        variableContainer = JsirVariableContainer.Initializer(cls)
 
         try {
             action()
@@ -210,7 +217,7 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
             classDescriptor = oldClass
             declaration = oldDeclaration
             container = oldContainer
-            this.outerParameter = oldOuterParameter
+            variableContainer = oldVariableContainer
         }
     }
 
@@ -270,13 +277,13 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         throw JsirGenerationException(expression, e)
     }
 
-    inner class LocalVariableAccessor(val localVariable: JsirVariable, val declaringFunction: FunctionDescriptor?) : VariableAccessor {
+    inner class LocalVariableAccessor(val localVariable: JsirVariable) : VariableAccessor {
         override fun get() = makeReference()
 
         override fun set(value: JsirExpression) {
             assign(makeReference(), value)
         }
 
-        private fun makeReference() = JsirExpression.VariableReference(localVariable, function != null && declaringFunction != function)
+        private fun makeReference() = JsirExpression.VariableReference(localVariable)
     }
 }

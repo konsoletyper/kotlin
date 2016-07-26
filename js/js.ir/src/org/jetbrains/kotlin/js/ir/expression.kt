@@ -32,7 +32,7 @@ sealed class JsirExpression {
 
     object Undefined : JsirExpression()
 
-    class VariableReference(var variable: JsirVariable, val free: Boolean) : JsirExpression()
+    class VariableReference(var variable: JsirVariable) : JsirExpression()
 
     class FunctionReference(var function: FunctionDescriptor) : JsirExpression()
 

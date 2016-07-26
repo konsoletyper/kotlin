@@ -18,15 +18,18 @@ package org.jetbrains.kotlin.js.ir.analyze
 
 import org.jetbrains.kotlin.js.ir.*
 
-fun JsirFunction.collectFreeVariables() = body.collectFreeVariables() + parameters.flatMap { it.defaultBody.collectFreeVariables() }
+fun JsirFunction.collectFreeVariables(): Set<JsirVariable> {
+    val container = JsirVariableContainer.Function(this)
+    return body.collectFreeVariables(container) + parameters.flatMap { it.defaultBody.collectFreeVariables(container) }
+}
 
-fun List<JsirStatement>.collectFreeVariables(): Set<JsirVariable> {
+private fun List<JsirStatement>.collectFreeVariables(container: JsirVariableContainer): Set<JsirVariable> {
     val variables = mutableSetOf<JsirVariable>()
     visit(object : JsirVisitor<Unit, Unit> {
         override fun accept(statement: JsirStatement, inner: () -> Unit) = inner()
 
         override fun accept(expression: JsirExpression, inner: () -> Unit) {
-            if (expression is JsirExpression.VariableReference && expression.free) {
+            if (expression is JsirExpression.VariableReference && expression.variable.container != container) {
                 variables += expression.variable
             }
             inner()

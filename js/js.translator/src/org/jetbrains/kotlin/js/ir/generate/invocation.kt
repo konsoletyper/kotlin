@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.psi.KtArrayAccessExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall
@@ -136,7 +137,7 @@ internal fun JsirContext.generateVariable(resolvedCall: ResolvedCall<*>, receive
 
         private fun requiresBackingFieldAccess(): Boolean {
             return (declaration is ConstructorDescriptor || declaration is ClassDescriptor) &&
-                   classDescriptor == descriptor.containingDeclaration
+                   classDescriptor?.descriptor == descriptor.containingDeclaration
         }
     }
 }
@@ -204,7 +205,7 @@ internal fun JsirContext.generateImplicitReceiver(receiver: ReceiverValue?) = wh
 
 internal fun JsirContext.generateThis(descriptor: ClassDescriptor): JsirExpression {
     var result: JsirExpression = JsirExpression.This
-    var currentClass = classDescriptor!!
+    var currentClass = classDescriptor!!.descriptor
     val outerParameter = this.outerParameter
     while (currentClass != descriptor) {
         result = if (result == JsirExpression.This && outerParameter != null && isInConstructor) {
@@ -213,7 +214,7 @@ internal fun JsirContext.generateThis(descriptor: ClassDescriptor): JsirExpressi
         else {
             JsirExpression.FieldAccess(result, JsirField.OuterClass(currentClass))
         }
-        currentClass = currentClass.containingDeclaration as ClassDescriptor
+        currentClass = DescriptorUtils.getParentOfType(currentClass, ClassDescriptor::class.java, true)!!
     }
     return result
 }

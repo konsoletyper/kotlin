@@ -62,7 +62,7 @@ private fun JsirContext.generateIn(expression: KtBinaryExpression): JsirExpressi
 }
 
 private fun JsirContext.generateElvis(leftPsi: KtExpression, rightPsi: KtExpression): JsirExpression {
-    val result = JsirVariable().makeReference()
+    val result = newTemporary().makeReference()
     assign(result, generate(leftPsi))
     val conditional = JsirStatement.If(result.nullCheck())
     nestedBlock(conditional.thenBody) {
@@ -147,7 +147,7 @@ private fun JsirContext.generateLogical(expression: KtBinaryExpression, invert: 
     val left = expression.left!!
     val right = expression.right!!
 
-    val temporary = JsirVariable().makeReference()
+    val temporary = newTemporary().makeReference()
     assign(temporary, generate(left))
     val condition = JsirStatement.If(if (invert) temporary.negate() else temporary)
     withSource(expression) {

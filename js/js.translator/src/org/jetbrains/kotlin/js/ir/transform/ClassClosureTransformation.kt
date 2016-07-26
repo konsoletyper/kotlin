@@ -69,21 +69,24 @@ class ClassClosureTransformation {
         if (function !is ConstructorDescriptor) return
 
         val fields = closureFields[function.containingDeclaration] ?: return
-        arguments.addAll(0, fields.map { JsirExpression.VariableReference(it, false) })
+        arguments.addAll(0, fields.map { it.makeReference() })
     }
 }
 
 private class SingleClassClosureTransformation(val module: JsirModule, val root: JsirClass) : JsirMapper {
     private var currentClass: JsirClass = root
     private var currentFunction: JsirFunction? = null
+    private lateinit var currentVariableContainer: JsirVariableContainer
     val closureFields = mutableSetOf<JsirVariable>()
 
     fun apply(cls: JsirClass) = process(cls) {
         currentClass = cls
         currentFunction = null
+        currentVariableContainer = currentClass.variableContainer
         cls.initializerBody.replace(this)
         for (function in cls.functions.values) {
             currentFunction = function
+            currentVariableContainer = function.variableContainer
             function.parameters.forEach { it.defaultBody.replace(this) }
             function.body.replace(this)
         }
@@ -96,7 +99,7 @@ private class SingleClassClosureTransformation(val module: JsirModule, val root:
             val statements = mutableListOf<JsirStatement>()
             val parameters = mutableListOf<JsirParameter>()
             for (closureField in closureFields) {
-                val parameter = JsirVariable(closureField.suggestedName)
+                val parameter = constructor.variableContainer.createVariable(false, closureField.suggestedName)
                 val reference = JsirExpression.FieldAccess(JsirExpression.This, JsirField.Closure(closureField))
                 statements += JsirStatement.Assignment(reference, parameter.makeReference())
                 parameters += JsirParameter(parameter)
@@ -120,7 +123,7 @@ private class SingleClassClosureTransformation(val module: JsirModule, val root:
     override fun map(statement: JsirStatement, canChangeType: Boolean): JsirStatement = statement
 
     override fun map(expression: JsirExpression): JsirExpression {
-        return if (expression is JsirExpression.VariableReference && expression.free) {
+        return if (expression is JsirExpression.VariableReference && expression.variable.container != currentVariableContainer) {
             closureFields += expression.variable
             JsirExpression.FieldAccess(getReceiver(), JsirField.Closure(expression.variable))
         }

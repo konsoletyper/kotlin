@@ -26,7 +26,7 @@ fun JsirContext.memoize(expression: JsirExpression) = when (expression) {
     is JsirExpression.Constant -> expression
 
     else -> {
-        val temporary = JsirVariable()
+        val temporary = newTemporary()
         assign(temporary.makeReference(), expression)
         temporary.makeReference()
     }
@@ -108,3 +108,5 @@ fun JsirContext.requireNonNull(value: JsirExpression): JsirExpression {
     }
     return memoized
 }
+
+fun JsirContext.newTemporary() = variableContainer!!.createVariable(true)

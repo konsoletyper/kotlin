@@ -21,8 +21,14 @@ import org.jetbrains.kotlin.descriptors.*
 sealed class JsirContainer {
     val functions: Map<FunctionDescriptor, JsirFunction>
         get() = mutableFunctions
+
     val properties: Map<VariableDescriptorWithAccessors, JsirProperty>
         get() = mutableProperties
+
+    val variableContainer = JsirVariableContainer.Initializer(this)
+
+    val variables: Set<JsirVariable>
+        get() = variableContainer.variables
 
     val initializerBody = mutableListOf<JsirStatement>()
 
@@ -34,6 +40,9 @@ class JsirFunction(val descriptor: FunctionDescriptor, val container: JsirContai
     val parameters = mutableListOf<JsirParameter>()
     val body = mutableListOf<JsirStatement>()
 
+    val variables: Set<JsirVariable>
+        get() = variableContainer.variables
+
     init {
         container.mutableFunctions[descriptor] = this
     }
@@ -43,6 +52,8 @@ class JsirFunction(val descriptor: FunctionDescriptor, val container: JsirContai
             container.mutableFunctions.keys -= descriptor
         }
     }
+
+    val variableContainer = JsirVariableContainer.Function(this)
 }
 
 class JsirParameter(val variable: JsirVariable) {
@@ -61,11 +72,9 @@ class JsirProperty(val descriptor: VariableDescriptorWithAccessors, val containe
     }
 }
 
-class JsirClass(val descriptor: ClassDescriptor, val file: JsirFile) : JsirContainer() {
+class JsirClass(val descriptor: ClassDescriptor, val file: JsirFile, val outer: JsirClass?) : JsirContainer() {
     var hasOuterProperty = false
-
     val closureFields = mutableSetOf<JsirVariable>()
-
     val delegateFields = mutableSetOf<JsirField.Delegate>()
 
     init {
@@ -110,6 +119,39 @@ class JsirFile(val module: JsirModule, val name: String) : JsirContainer() {
     internal val mutableClasses = mutableMapOf<ClassDescriptor, JsirClass>()
 }
 
-class JsirVariable(val suggestedName: String? = null)
+sealed class JsirVariableContainer {
+    internal val mutableVariables = mutableSetOf<JsirVariable>()
 
-fun JsirVariable.makeReference() = JsirExpression.VariableReference(this, false)
+    val variables: Set<JsirVariable>
+        get() = mutableVariables
+
+    class Function(val reference: JsirFunction) : JsirVariableContainer() {
+
+        override fun equals(other: Any?) = other is Function && other.reference == reference
+
+        override fun hashCode() = reference.hashCode()
+    }
+
+    class Initializer(val reference: JsirContainer) : JsirVariableContainer() {
+        override fun equals(other: Any?) = other is Initializer && other.reference == reference
+
+        override fun hashCode() = reference.hashCode()
+    }
+
+    fun createVariable(mutable: Boolean, suggestedName: String? = null) = JsirVariable(this, mutable, suggestedName)
+}
+
+class JsirVariable internal constructor(val container: JsirVariableContainer, var mutable: Boolean, var suggestedName: String? = null) {
+    init {
+        container.mutableVariables += this
+    }
+
+    fun delete() {
+        container.mutableVariables -= this
+    }
+
+    val deleted: Boolean
+        get() = this in container.mutableVariables
+}
+
+fun JsirVariable.makeReference() = JsirExpression.VariableReference(this)

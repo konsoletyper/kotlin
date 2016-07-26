@@ -82,7 +82,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         return if (expression.statements.isNotEmpty()) {
             if (label != null) {
                 val block = JsirStatement.Block()
-                val temporary = JsirVariable().makeReference()
+                val temporary = context.newTemporary().makeReference()
                 context.nestedLabel(label, block, false, false) {
                     for (statement in expression.statements.dropLast(1)) {
                         context.append(context.generate(statement))
@@ -106,8 +106,8 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     override fun visitReturnExpression(expression: KtReturnExpression, data: JsirContext): JsirExpression {
         context.withSource(expression) {
             val returnValue = expression.returnedExpression?.accept(this, data)
-            val target = getNonLocalReturnTarget(expression) ?: context.function
-            context.append(JsirStatement.Return(returnValue, target!!))
+            val target = getNonLocalReturnTarget(expression) ?: context.function!!.descriptor
+            context.append(JsirStatement.Return(returnValue, target))
         }
         return JsirExpression.Undefined
     }
@@ -220,14 +220,15 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     private fun generateClass(psi: KtClassOrObject, descriptor: ClassDescriptor) {
-        val cls = JsirClass(descriptor, context.file!!)
-        val outerParameter = if (descriptor.isInner) JsirVariable("\$outer") else null
+        val outerClass = if (descriptor.isInner && !(descriptor.getSuperClassNotAny()?.isInner ?: false)) {
+            context.classDescriptor
+        }
+        else {
+            null
+        }
+        val cls = JsirClass(descriptor, context.file!!, outerClass)
         val delegationGenerator = DelegationGenerator(context, psi, cls)
-        context.nestedClass(cls, outerParameter) {
-            if (outerParameter != null && !(descriptor.getSuperClassNotAny()?.isInner ?: false)) {
-                cls.hasOuterProperty = true
-            }
-
+        context.nestedClass(cls) {
             context.nestedVariableScope {
                 val primaryConstructorPsi = psi.getPrimaryConstructor()
                 val constructorDescriptor = context.bindingContext[BindingContext.CONSTRUCTOR, psi] ?:
@@ -345,7 +346,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                 function.body += JsirStatement.Return(access, accessor)
             }
             else {
-                val parameter = JsirVariable(accessor.correspondingVariable.name.asString())
+                val parameter = context.variableContainer!!.createVariable(false, accessor.correspondingVariable.name.asString())
                 function.parameters += JsirParameter(parameter)
                 function.body += JsirStatement.Assignment(access, parameter.makeReference())
             }
@@ -353,7 +354,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     override fun visitIfExpression(expression: KtIfExpression, data: JsirContext): JsirExpression {
-        val temporary = JsirVariable()
+        val temporary = context.newTemporary()
 
         val conditionPsi = expression.condition!!
         val statement = context.withSource(conditionPsi) {
@@ -428,7 +429,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     override fun visitTryExpression(expression: KtTryExpression, data: JsirContext?): JsirExpression {
-        val temporary = JsirVariable().makeReference()
+        val temporary = context.newTemporary().makeReference()
         val statement = JsirStatement.Try()
         context.nestedBlock(statement.body) {
             context.assign(temporary, context.generate(expression.tryBlock))
@@ -495,7 +496,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
 
     override fun visitSafeQualifiedExpression(expression: KtSafeQualifiedExpression, data: JsirContext?): JsirExpression {
         val receiver = context.memoize(expression.receiverExpression)
-        val result = JsirVariable().makeReference()
+        val result = context.newTemporary().makeReference()
         val conditional = JsirStatement.If(receiver.nullCheck().negate())
         context.nestedBlock(conditional.thenBody) {
             context.assign(result, generateQualified(expression) { receiver })
@@ -550,7 +551,12 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         val descriptor = context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, functionPsi] as FunctionDescriptor
         val function = JsirFunction(descriptor, context.container!!, static)
 
-        val extensionParameter = if (functionPsi.isExtensionDeclaration()) JsirVariable("\$receiver") else null
+        val extensionParameter = if (functionPsi.isExtensionDeclaration()) {
+            function.variableContainer.createVariable(false, "\$receiver")
+        }
+        else {
+            null
+        }
         if (extensionParameter != null) {
             function.parameters += JsirParameter(extensionParameter)
         }
@@ -569,8 +575,14 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             }
         }
 
-        context.nestedFunction(descriptor, extensionParameter) {
-            val outerParameter = context.outerParameter
+        val outerParameter = if (function.descriptor is ConstructorDescriptor && (function.container as JsirClass).outer != null) {
+            function.variableContainer.createVariable(false, "\$outer")
+        }
+        else {
+            null
+        }
+
+        context.nestedFunction(function, extensionParameter, outerParameter) {
             if (descriptor is ConstructorDescriptor && outerParameter != null) {
                 function.parameters += JsirParameter(outerParameter)
                 val cls = descriptor.containingDeclaration

@@ -18,7 +18,8 @@ package org.jetbrains.kotlin.js.ir.transform
 
 import org.jetbrains.kotlin.js.ir.JsirStatement
 import org.jetbrains.kotlin.js.ir.JsirVariable
+import org.jetbrains.kotlin.js.ir.JsirVariableContainer
 
 interface Transformation {
-    fun apply(parameters: List<JsirVariable>, body: MutableList<JsirStatement>)
+    fun apply(variableContainer: JsirVariableContainer, body: MutableList<JsirStatement>)
 }
