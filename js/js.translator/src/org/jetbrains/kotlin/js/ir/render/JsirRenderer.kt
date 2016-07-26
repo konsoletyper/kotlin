@@ -221,10 +221,6 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
             parameterVariables += primaryConstructor.parameters.map { it.variable }
         }
 
-        for (initStatement in cls.initializerBody) {
-            jsConstructor.body.statements += context.render(initStatement)
-        }
-
         renderVariableDeclarations(context, parameterVariables)
 
         val superClassDescriptor = descriptor.getSuperClassNotAny()

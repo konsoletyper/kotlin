@@ -27,6 +27,7 @@ import org.jetbrains.kotlin.psi.psiUtil.isExtensionDeclaration
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.BindingContextUtils
 import org.jetbrains.kotlin.resolve.BindingTrace
+import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.constants.NullValue
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator
@@ -193,7 +194,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     override fun visitNamedFunction(functionPsi: KtNamedFunction, data: JsirContext): JsirExpression {
-        return generateFunctionDeclaration(functionPsi, context.declaration !is ClassDescriptor)
+        return generateFunctionDeclaration(functionPsi, context.declaration !is ClassDescriptor, emptyList())
     }
 
     override fun visitKtFile(file: KtFile, data: JsirContext): JsirExpression {
@@ -220,7 +221,9 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     private fun generateClass(psi: KtClassOrObject, descriptor: ClassDescriptor) {
-        val outerClass = if (descriptor.isInner && !(descriptor.getSuperClassNotAny()?.isInner ?: false)) {
+        val isInner = descriptor.isInner || DescriptorUtils.isDescriptorWithLocalVisibility(descriptor) && context.classDescriptor != null
+        val isSuperclassInner = descriptor.getSuperClassNotAny()?.isInner ?: false
+        val outerClass = if (isInner && !isSuperclassInner) {
             context.classDescriptor
         }
         else {
@@ -242,22 +245,30 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                 }
 
                 if (primaryConstructorPsi != null) {
-                    context.nestedBlock(cls.initializerBody) {
+                    val initializerBody = mutableListOf<JsirStatement>()
+                    context.nestedBlock(initializerBody) {
                         delegationGenerator.contributeToInitializer()
                     }
-                    primaryConstructorPsi.accept(this, context)
+                    generateFunctionDeclaration(primaryConstructorPsi, false, initializerBody)
                 }
                 else if (constructorDescriptor != null) {
-                    context.nestedBlock(cls.initializerBody) {
-                        synthesizeSuperCall(constructorDescriptor)
-                        delegationGenerator.contributeToInitializer()
+                    val constructor = JsirFunction(constructorDescriptor, cls, false)
+                    context.nestedFunction(constructor, null, null) {
+                        context.nestedBlock(constructor.body) {
+                            synthesizeSuperCall(constructorDescriptor)
+                            delegationGenerator.contributeToInitializer()
+                        }
                     }
                 }
 
-                val bodyPsi = psi.getBody()
-                if (bodyPsi != null) {
-                    for (declaration in bodyPsi.declarations) {
-                        declaration.accept(this, context)
+                val constructorBody = constructorDescriptor?.let { cls.functions[it]?.body } ?: mutableListOf()
+
+                context.withInitializerBody(constructorBody) {
+                    val bodyPsi = psi.getBody()
+                    if (bodyPsi != null) {
+                        for (declaration in bodyPsi.declarations) {
+                            declaration.accept(this, context)
+                        }
                     }
                 }
                 delegationGenerator.generateMembers()
@@ -313,8 +324,9 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             JsirProperty(variable, context.container!!)
             val initializer = propertyPsi.initializer
             if (initializer != null) {
-                context.nestedBlock(context.container!!.initializerBody) {
-                    val receiver = if (variable.containingDeclaration is ClassDescriptor) JsirExpression.This else null
+                context.nestedBlock(context.initializerBody!!) {
+                    val container = variable.containingDeclaration
+                    val receiver = if (container is ClassDescriptor) JsirExpression.This else null
                     val access = JsirExpression.FieldAccess(receiver, JsirField.Backing(variable))
                     context.assign(access, context.generate(initializer))
                 }
@@ -335,7 +347,8 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         else {
             val function = JsirFunction(accessor, context.container!!, false)
             val isGetter = accessor.valueParameters.isEmpty()
-            val receiver = if (accessor.correspondingVariable.containingDeclaration is ClassDescriptor) {
+            val container = accessor.correspondingVariable.containingDeclaration
+            val receiver = if (container is ClassDescriptor) {
                 JsirExpression.This
             }
             else {
@@ -526,19 +539,15 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     override fun visitPropertyAccessor(accessor: KtPropertyAccessor, data: JsirContext?): JsirExpression {
-        return generateFunctionDeclaration(accessor, false)
+        return generateFunctionDeclaration(accessor, false, emptyList())
     }
 
     override fun visitLambdaExpression(expression: KtLambdaExpression, data: JsirContext?): JsirExpression {
-        return generateFunctionDeclaration(expression.functionLiteral, true)
-    }
-
-    override fun visitPrimaryConstructor(constructor: KtPrimaryConstructor, data: JsirContext?): JsirExpression {
-        return generateFunctionDeclaration(constructor, false)
+        return generateFunctionDeclaration(expression.functionLiteral, true, emptyList())
     }
 
     override fun visitAnonymousInitializer(initializer: KtAnonymousInitializer, data: JsirContext?): JsirExpression {
-        context.nestedBlock(context.container!!.initializerBody) {
+        context.nestedBlock(context.initializerBody!!) {
             val body = initializer.body
             if (body != null) {
                 context.append(context.generate(body))
@@ -547,7 +556,11 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         return JsirExpression.Undefined
     }
 
-    private fun generateFunctionDeclaration(functionPsi: KtDeclarationWithBody, static: Boolean): JsirExpression {
+    private fun generateFunctionDeclaration(
+            functionPsi: KtDeclarationWithBody,
+            static: Boolean,
+            initializerStatements: List<JsirStatement>
+    ): JsirExpression {
         val descriptor = context.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, functionPsi] as FunctionDescriptor
         val function = JsirFunction(descriptor, context.container!!, static)
 
@@ -561,6 +574,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             function.parameters += JsirParameter(extensionParameter)
         }
 
+        val initializerBody = initializerStatements.toMutableList()
         for (parameterPsi in functionPsi.valueParameters) {
             val parameter = BindingUtils.getDescriptorForElement(context.bindingContext, parameterPsi) as ValueParameterDescriptor
             val property = context.bindingContext[BindingContext.VALUE_PARAMETER_AS_PROPERTY, parameter]
@@ -568,7 +582,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                 JsirProperty(property, context.container!!)
                 generateAccessor(null, property.getter)
                 generateAccessor(null, property.setter)
-                context.nestedBlock(context.container!!.initializerBody) {
+                context.nestedBlock(initializerBody) {
                     val lhs = JsirExpression.FieldAccess(JsirExpression.This, JsirField.Backing(property))
                     context.assign(lhs, context.getVariable(parameter).get())
                 }
@@ -610,8 +624,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             context.nestedBlock(function.body) {
                 if (descriptor is ConstructorDescriptor) {
                     synthesizeSuperCall(descriptor)
-                    function.body += context.container!!.initializerBody
-                    context.container!!.initializerBody.clear()
+                    function.body += initializerBody
                 }
 
                 val returnValue = functionPsi.bodyExpression?.let { context.generate(it) } ?: JsirExpression.Undefined

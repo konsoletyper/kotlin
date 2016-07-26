@@ -27,6 +27,7 @@ class Transformer {
     fun transform(module: JsirModule) {
         ClassClosureTransformation().apply(module)
         for (file in module.files) {
+            transformations.forEach { it.apply(file.variableContainer, file.initializerBody) }
             transformContainer(file)
         }
         for (cls in module.classes.values) {
@@ -35,9 +36,7 @@ class Transformer {
     }
 
     private fun transformContainer(container: JsirContainer) {
-        transformations.forEach { it.apply(container.variableContainer, container.initializerBody) }
         for (function in container.functions.values) {
-            val functionParameters = function.parameters.map { it.variable }
             for (parameter in function.parameters) {
                 transformations.forEach { it.apply(function.variableContainer, parameter.defaultBody) }
             }

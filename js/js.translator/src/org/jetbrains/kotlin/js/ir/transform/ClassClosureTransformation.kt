@@ -40,9 +40,6 @@ class ClassClosureTransformation {
             applyToCallSites(closureFields, function.parameters.flatMap { it.defaultBody })
             applyToCallSites(closureFields, function.body)
         }
-        for (cls in module.classes.values) {
-            applyToCallSites(closureFields, cls.initializerBody)
-        }
         for (file in module.files) {
             applyToCallSites(closureFields, file.initializerBody)
         }
@@ -79,20 +76,24 @@ private class SingleClassClosureTransformation(val module: JsirModule, val root:
     private lateinit var currentVariableContainer: JsirVariableContainer
     val closureFields = mutableSetOf<JsirVariable>()
 
-    fun apply(cls: JsirClass) = process(cls) {
+    fun apply(cls: JsirClass) {
         currentClass = cls
         currentFunction = null
         currentVariableContainer = currentClass.variableContainer
-        cls.initializerBody.replace(this)
         for (function in cls.functions.values) {
             currentFunction = function
             currentVariableContainer = function.variableContainer
             function.parameters.forEach { it.defaultBody.replace(this) }
             function.body.replace(this)
         }
+        for (innerClass in cls.innerClasses) {
+            apply(innerClass)
+        }
     }
 
     fun addClosureFields() {
+        if (closureFields.isEmpty()) return
+
         root.closureFields += closureFields
         for (constructorDescriptor in root.descriptor.constructors) {
             val constructor = root.functions[constructorDescriptor] ?: continue
@@ -110,16 +111,6 @@ private class SingleClassClosureTransformation(val module: JsirModule, val root:
         }
     }
 
-    private fun process(cls: JsirClass, action: () -> Unit) {
-        val descriptor = cls.descriptor
-        action()
-        for (innerDescriptor in descriptor.unsubstitutedInnerClassesScope.getContributedDescriptors()) {
-            if (innerDescriptor is ClassDescriptor && innerDescriptor.isInner) {
-                apply(module.classes[innerDescriptor]!!)
-            }
-        }
-    }
-
     override fun map(statement: JsirStatement, canChangeType: Boolean): JsirStatement = statement
 
     override fun map(expression: JsirExpression): JsirExpression {
@@ -133,8 +124,8 @@ private class SingleClassClosureTransformation(val module: JsirModule, val root:
     }
 
     private fun getReceiver(): JsirExpression {
-        var receiver: JsirExpression = JsirExpression.This
         var cls = currentClass.descriptor
+        var receiver: JsirExpression = JsirExpression.This
         while (cls != root.descriptor) {
             receiver = JsirExpression.FieldAccess(receiver, JsirField.OuterClass(cls))
             cls = cls.containingDeclaration as ClassDescriptor

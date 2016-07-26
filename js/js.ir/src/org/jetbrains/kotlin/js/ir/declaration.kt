@@ -30,8 +30,6 @@ sealed class JsirContainer {
     val variables: Set<JsirVariable>
         get() = variableContainer.variables
 
-    val initializerBody = mutableListOf<JsirStatement>()
-
     internal val mutableFunctions = mutableMapOf<FunctionDescriptor, JsirFunction>()
     internal val mutableProperties = mutableMapOf<VariableDescriptorWithAccessors, JsirProperty>()
 }
@@ -73,13 +71,18 @@ class JsirProperty(val descriptor: VariableDescriptorWithAccessors, val containe
 }
 
 class JsirClass(val descriptor: ClassDescriptor, val file: JsirFile, val outer: JsirClass?) : JsirContainer() {
-    var hasOuterProperty = false
     val closureFields = mutableSetOf<JsirVariable>()
     val delegateFields = mutableSetOf<JsirField.Delegate>()
+
+    val innerClasses: Set<JsirClass>
+        get() = mutableInnerClasses
 
     init {
         file.mutableClasses[descriptor] = this
         file.module.mutableClasses[descriptor] = this
+        if (outer != null) {
+            outer.mutableInnerClasses += this
+        }
     }
 
     fun delete() {
@@ -87,7 +90,12 @@ class JsirClass(val descriptor: ClassDescriptor, val file: JsirFile, val outer: 
             file.mutableClasses.keys -= descriptor
             file.module.mutableClasses.keys -= descriptor
         }
+        if (outer != null) {
+            outer.mutableInnerClasses -= this
+        }
     }
+
+    private val mutableInnerClasses = mutableSetOf<JsirClass>()
 }
 
 class JsirModule(val descriptor: ModuleDescriptor) {
@@ -111,6 +119,8 @@ class JsirModule(val descriptor: ModuleDescriptor) {
 class JsirFile(val module: JsirModule, val name: String) : JsirContainer() {
     val classes: Map<ClassDescriptor, JsirClass>
         get() = mutableClasses
+
+    val initializerBody = mutableListOf<JsirStatement>()
 
     init {
         module.mutableFiles += this

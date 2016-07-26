@@ -63,6 +63,10 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         get
         private set
 
+    var initializerBody: MutableList<JsirStatement>? = null
+        get
+        private set
+
     var defaultContinueTarget: JsirLabeled? = null
         get
         private set
@@ -179,12 +183,23 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         this.file = file
         variableContainer = JsirVariableContainer.Initializer(file)
         try {
-            action()
+            withInitializerBody(file.initializerBody, action)
         }
         finally {
             container = oldContainer
             this.file = oldFile
             variableContainer = oldVariableContainer
+        }
+    }
+
+    fun withInitializerBody(initializerBody: MutableList<JsirStatement>, action: () -> Unit) {
+        val oldInitializerBody = this.initializerBody
+        this.initializerBody = initializerBody
+        try {
+            action()
+        }
+        finally {
+            this.initializerBody = oldInitializerBody
         }
     }
 
