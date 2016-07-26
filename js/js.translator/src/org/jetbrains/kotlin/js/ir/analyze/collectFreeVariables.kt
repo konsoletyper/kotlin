@@ -19,8 +19,7 @@ package org.jetbrains.kotlin.js.ir.analyze
 import org.jetbrains.kotlin.js.ir.*
 
 fun JsirFunction.collectFreeVariables(): Set<JsirVariable> {
-    val container = JsirVariableContainer.Function(this)
-    return body.collectFreeVariables(container) + parameters.flatMap { it.defaultBody.collectFreeVariables(container) }
+    return body.collectFreeVariables(variableContainer) + parameters.flatMap { it.defaultBody.collectFreeVariables(variableContainer) }
 }
 
 private fun List<JsirStatement>.collectFreeVariables(container: JsirVariableContainer): Set<JsirVariable> {

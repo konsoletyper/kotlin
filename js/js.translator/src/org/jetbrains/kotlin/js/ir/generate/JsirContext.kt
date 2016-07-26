@@ -159,8 +159,11 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         this.outerParameter = outerParameter
         declaration = function.descriptor
         extensionParametersImpl[function.descriptor] = extensionParameter
-        variableContainer = JsirVariableContainer.Function(function)
-        functions[function.descriptor] = function
+        variableContainer = function.variableContainer
+        val functionWasInMap = function.descriptor in functions.keys
+        if (!functionWasInMap) {
+            functions[function.descriptor] = function
+        }
 
         try {
             nestedVariableScope(action)
@@ -170,8 +173,21 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
             declaration = oldDeclaration
             extensionParametersImpl.keys -= function.descriptor
             variableContainer = oldVariableContainer
-            functions.keys -= function.descriptor
+            if (functionWasInMap) {
+                functions.keys -= function.descriptor
+            }
             this.outerParameter = oldOuterParameter
+        }
+    }
+
+    fun nestedVariableContainer(variableContainer: JsirVariableContainer, action: () -> Unit) {
+        val oldVariableContainer = this.variableContainer
+        this.variableContainer = variableContainer
+        try {
+            action()
+        }
+        finally {
+            this.variableContainer = oldVariableContainer
         }
     }
 
@@ -181,7 +197,7 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         val oldVariableContainer = variableContainer
         container = file
         this.file = file
-        variableContainer = JsirVariableContainer.Initializer(file)
+        variableContainer = file.variableContainer
         try {
             withInitializerBody(file.initializerBody, action)
         }
@@ -219,11 +235,9 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         val oldClass = classDescriptor
         val oldDeclaration = declaration
         val oldContainer = container
-        val oldVariableContainer = variableContainer
         classDescriptor = cls
         declaration = cls.descriptor
         container = cls
-        variableContainer = JsirVariableContainer.Initializer(cls)
 
         try {
             action()
@@ -232,7 +246,6 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
             classDescriptor = oldClass
             declaration = oldDeclaration
             container = oldContainer
-            variableContainer = oldVariableContainer
         }
     }
 

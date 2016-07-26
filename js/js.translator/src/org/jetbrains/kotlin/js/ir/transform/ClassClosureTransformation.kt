@@ -73,13 +73,12 @@ class ClassClosureTransformation {
 private class SingleClassClosureTransformation(val module: JsirModule, val root: JsirClass) : JsirMapper {
     private var currentClass: JsirClass = root
     private var currentFunction: JsirFunction? = null
-    private lateinit var currentVariableContainer: JsirVariableContainer
+    private var currentVariableContainer: JsirVariableContainer? = null
     val closureFields = mutableSetOf<JsirVariable>()
 
     fun apply(cls: JsirClass) {
         currentClass = cls
         currentFunction = null
-        currentVariableContainer = currentClass.variableContainer
         for (function in cls.functions.values) {
             currentFunction = function
             currentVariableContainer = function.variableContainer

@@ -25,11 +25,6 @@ sealed class JsirContainer {
     val properties: Map<VariableDescriptorWithAccessors, JsirProperty>
         get() = mutableProperties
 
-    val variableContainer = JsirVariableContainer.Initializer(this)
-
-    val variables: Set<JsirVariable>
-        get() = variableContainer.variables
-
     internal val mutableFunctions = mutableMapOf<FunctionDescriptor, JsirFunction>()
     internal val mutableProperties = mutableMapOf<VariableDescriptorWithAccessors, JsirProperty>()
 }
@@ -122,6 +117,11 @@ class JsirFile(val module: JsirModule, val name: String) : JsirContainer() {
 
     val initializerBody = mutableListOf<JsirStatement>()
 
+    val variables: Set<JsirVariable>
+        get() = variableContainer.variables
+
+    val variableContainer = JsirVariableContainer.Initializer(this)
+
     init {
         module.mutableFiles += this
     }
@@ -135,14 +135,14 @@ sealed class JsirVariableContainer {
     val variables: Set<JsirVariable>
         get() = mutableVariables
 
-    class Function(val reference: JsirFunction) : JsirVariableContainer() {
+    class Function internal constructor(val reference: JsirFunction) : JsirVariableContainer() {
 
         override fun equals(other: Any?) = other is Function && other.reference == reference
 
         override fun hashCode() = reference.hashCode()
     }
 
-    class Initializer(val reference: JsirContainer) : JsirVariableContainer() {
+    class Initializer internal constructor(val reference: JsirFile) : JsirVariableContainer() {
         override fun equals(other: Any?) = other is Initializer && other.reference == reference
 
         override fun hashCode() = reference.hashCode()

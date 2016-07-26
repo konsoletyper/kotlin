@@ -57,9 +57,13 @@ internal fun JsirContext.generateInvocation(resolvedCall: ResolvedCall<*>, argum
     }
 
     if (descriptor is ConstructorDescriptor) {
-        val receiver = if (resolvedCall.dispatchReceiver != null) generateReceiver(resolvedCall, receiverFactory).first!! else null
+        val outerClass = module.classes[descriptor.containingDeclaration]?.outer
+        val receiver = when {
+            resolvedCall.dispatchReceiver != null -> generateReceiver(resolvedCall, receiverFactory).first!!
+            outerClass != null -> generateThis(outerClass.descriptor)
+            else -> null
+        }
         val arguments = generateArguments(resolvedCall, argumentsFactory())
-
         return JsirExpression.NewInstance(descriptor, *(receiver.singletonOrEmptyList() + arguments).toTypedArray())
     }
 
@@ -208,7 +212,7 @@ internal fun JsirContext.generateThis(descriptor: ClassDescriptor): JsirExpressi
     var currentClass = classDescriptor!!.descriptor
     val outerParameter = this.outerParameter
     while (currentClass != descriptor) {
-        result = if (result == JsirExpression.This && outerParameter != null && isInConstructor) {
+        result = if (result == JsirExpression.This && outerParameter != null) {
             outerParameter.makeReference()
         }
         else {
@@ -218,15 +222,5 @@ internal fun JsirContext.generateThis(descriptor: ClassDescriptor): JsirExpressi
     }
     return result
 }
-
-private val JsirContext.isInConstructor: Boolean
-    get() {
-        val declaration = declaration
-        return when (declaration) {
-            is ClassDescriptor,
-            is ConstructorDescriptor -> true
-            else -> false
-        }
-    }
 
 internal fun JsirContext.defaultReceiverFactory(psi: KtExpression?): (() -> JsirExpression)? = psi?.let { ({ memoize(it) }) }

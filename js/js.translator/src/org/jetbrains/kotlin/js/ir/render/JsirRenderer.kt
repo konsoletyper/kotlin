@@ -286,9 +286,14 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
 
         val constructorName = getInternalName(descriptor)
         for (function in functions) {
-            val overriddenFunction = function.overriddenDescriptors.first()
+            val overriddenFunction = generateSequence(function) { it.overriddenDescriptors.firstOrNull() }
+                    .distinct()
+                    .firstOrNull() { it.modality != Modality.ABSTRACT && it.kind != CallableMemberDescriptor.Kind.FAKE_OVERRIDE }
+            if (overriddenFunction == null) continue
+
             val overriddenClass = overriddenFunction.containingDeclaration as ClassDescriptor
             if (overriddenClass.kind != ClassKind.INTERFACE) continue
+            if (overriddenClass.fqNameSafe.asString() == "kotlin.Any") continue
 
             val thisPrototype = makePrototype(constructorName)
             val overriddenPrototype = makePrototype(getInternalName(overriddenClass))
