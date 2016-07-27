@@ -20,8 +20,10 @@ import com.google.dart.compiler.backend.js.ast.JsExpression
 import com.google.dart.compiler.backend.js.ast.JsInvocation
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.builtins.PrimitiveType
+import org.jetbrains.kotlin.descriptors.ConstructorDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.ir.JsirExpression
+import org.jetbrains.kotlin.js.ir.render.InstantiationRenderer
 import org.jetbrains.kotlin.js.ir.render.InvocationRenderer
 import org.jetbrains.kotlin.js.ir.render.JsirRenderingContext
 import org.jetbrains.kotlin.js.ir.render.kotlinReference
@@ -29,7 +31,7 @@ import org.jetbrains.kotlin.js.patterns.NamePredicate
 import org.jetbrains.kotlin.js.patterns.PatternBuilder.pattern
 import org.jetbrains.kotlin.utils.singletonOrEmptyList
 
-class ArrayInvocationRenderer : InvocationRenderer {
+class ArrayInvocationRenderer : InvocationRenderer, InstantiationRenderer {
     private val NUMBER_ARRAY: NamePredicate
     private val CHAR_ARRAY = NamePredicate(PrimitiveType.CHAR.arrayTypeName)
     private val BOOLEAN_ARRAY = NamePredicate(PrimitiveType.BOOLEAN.arrayTypeName)
@@ -59,6 +61,8 @@ class ArrayInvocationRenderer : InvocationRenderer {
 
     override fun isApplicable(descriptor: FunctionDescriptor) = patterns.any { it.first.apply(descriptor) }
 
+    override fun isApplicable(descriptor: ConstructorDescriptor) = isApplicable(descriptor as FunctionDescriptor)
+
     override fun render(
             function: FunctionDescriptor, receiver: JsirExpression?, arguments: List<JsirExpression>,
             virtual: Boolean, context: JsirRenderingContext
@@ -66,5 +70,9 @@ class ArrayInvocationRenderer : InvocationRenderer {
         val functionName = patterns.find { it.first.apply(function) }!!.second
         val allArguments = receiver.singletonOrEmptyList() + arguments
         return JsInvocation(context.kotlinReference(functionName), allArguments.map { context.render(it) })
+    }
+
+    override fun render(constructor: ConstructorDescriptor, arguments: List<JsirExpression>, context: JsirRenderingContext): JsExpression {
+        return render(constructor, null, arguments, false, context)
     }
 }

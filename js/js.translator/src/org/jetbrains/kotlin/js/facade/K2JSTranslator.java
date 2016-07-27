@@ -104,6 +104,8 @@ public final class K2JSTranslator {
         renderer.getInvocationRenderers().add(new NativeInvocationRenderer());
         renderer.getInvocationRenderers().add(new ArrayInvocationRenderer());
         renderer.getInvocationRenderers().add(new StringLengthRenderer());
+        renderer.getInstantiationRenderers().add(new NativeInvocationRenderer());
+        renderer.getInstantiationRenderers().add(new ArrayInvocationRenderer());
         renderer.getObjectReferenceRenderers().add(new NativeObjectReferenceRenderer());
         renderer.getClassFilters().add(new NativeClassFilter());
         renderer.getFunctionFilters().add(new NativeFunctionFilter());

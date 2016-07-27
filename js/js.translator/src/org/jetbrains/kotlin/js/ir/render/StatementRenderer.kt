@@ -358,9 +358,9 @@ class StatementRenderer(val context: JsirRenderingContext) {
         }
 
         is JsirExpression.NewInstance -> {
-            val invocationRenderer = context.getInvocationRenderer(expression.constructor)
+            val invocationRenderer = context.getInstantiationRenderer(expression.constructor)
             if (invocationRenderer != null) {
-                invocationRenderer.render(expression.constructor, null, expression.arguments, false, context)
+                invocationRenderer.render(expression.constructor,  expression.arguments, context)
             }
             else {
                 val jsConstructor = pureFqn(context.getInternalName(expression.constructor.containingDeclaration), null)

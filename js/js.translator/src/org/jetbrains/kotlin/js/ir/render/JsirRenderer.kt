@@ -34,6 +34,7 @@ import org.jetbrains.kotlin.utils.singletonOrEmptyList
 
 class JsirRenderer {
     val invocationRenderers = mutableListOf<InvocationRenderer>()
+    val instantiationRenderers = mutableListOf<InstantiationRenderer>()
     val objectReferenceRenderers = mutableListOf<ObjectReferenceRenderer>()
     val classFilters = mutableListOf<(JsirClass) -> Boolean>()
     val functionFilters = mutableListOf<(JsirFunction) -> Boolean>()
@@ -60,6 +61,7 @@ class JsirRenderer {
     fun render(module: JsirModule, program: JsProgram): JsirRenderingResult {
         val rendererImpl = JsirRendererImpl(module, program).apply {
             invocationRenderers += this@JsirRenderer.invocationRenderers
+            instantiationRenderers += this@JsirRenderer.instantiationRenderers
             objectReferenceRenderers += this@JsirRenderer.objectReferenceRenderers
             classFilters += this@JsirRenderer.classFilters
             functionFilters += this@JsirRenderer.functionFilters
@@ -81,11 +83,13 @@ class JsirRenderer {
 
 private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
     val invocationRenderers = mutableListOf<InvocationRenderer>()
+    val instantiationRenderers = mutableListOf<InstantiationRenderer>()
     val objectReferenceRenderers = mutableListOf<ObjectReferenceRenderer>()
     val classFilters = mutableListOf<(JsirClass) -> Boolean>()
     val functionFilters = mutableListOf<(JsirFunction) -> Boolean>()
     val externalNameContributors = mutableListOf<ExternalNameContributor>()
     val invocationRendererCache = mutableMapOf<FunctionDescriptor, InvocationRenderer?>()
+    val instantiationRendererCache = mutableMapOf<ConstructorDescriptor, InstantiationRenderer?>()
     val objectReferenceRendererCache = mutableMapOf<ClassDescriptor, ObjectReferenceRenderer?>()
     val wrapperFunction = JsFunction(program.rootScope, JsBlock(), "wrapper")
     val importsSection = mutableListOf<JsStatement>()
@@ -697,6 +701,10 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
 
         override fun getInvocationRenderer(function: FunctionDescriptor) = invocationRendererCache.getOrPut(function) {
             invocationRenderers.firstOrNull { it.isApplicable(function) }
+        }
+
+        override fun getInstantiationRenderer(constructor: ConstructorDescriptor) = instantiationRendererCache.getOrPut(constructor) {
+            instantiationRenderers.firstOrNull { it.isApplicable(constructor) }
         }
 
         override fun getObjectReferenceRenderer(cls: ClassDescriptor) = objectReferenceRendererCache.getOrPut(cls) {

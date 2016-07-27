@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.js.ir.render.nativecall
 import com.google.dart.compiler.backend.js.ast.*
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.ir.JsirExpression
+import org.jetbrains.kotlin.js.ir.render.InstantiationRenderer
 import org.jetbrains.kotlin.js.ir.render.InvocationRenderer
 import org.jetbrains.kotlin.js.ir.render.JsirRenderingContext
 import org.jetbrains.kotlin.js.ir.render.kotlinName
@@ -26,14 +27,20 @@ import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
 import org.jetbrains.kotlin.js.translate.utils.ManglingUtils
 
-class NativeInvocationRenderer() : InvocationRenderer {
+class NativeInvocationRenderer() : InvocationRenderer, InstantiationRenderer {
     override fun isApplicable(descriptor: FunctionDescriptor): Boolean {
-        if (isApplicableDirectly(descriptor)) return true
-        if (descriptor is VariableAccessorDescriptor && isApplicableDirectly(descriptor.correspondingVariable)) return true
+        if (isApplicableDirectly(descriptor.original)) return true
+        if (descriptor is VariableAccessorDescriptor && isApplicableDirectly(descriptor.correspondingVariable.original)) return true
         return false
     }
 
+    override fun isApplicable(descriptor: ConstructorDescriptor) = isApplicable(descriptor as FunctionDescriptor)
+
     private fun isApplicableDirectly(descriptor: DeclarationDescriptor): Boolean {
+        if (descriptor is CallableMemberDescriptor && descriptor.kind == CallableMemberDescriptor.Kind.FAKE_OVERRIDE) {
+            return generateSequence(descriptor) { it.overriddenDescriptors.firstOrNull()?.original }
+                    .any { AnnotationsUtils.isNativeObject(it) || AnnotationsUtils.isLibraryObject(it) }
+        }
         return AnnotationsUtils.isNativeObject(descriptor) || AnnotationsUtils.isLibraryObject(descriptor)
     }
 
@@ -57,32 +64,7 @@ class NativeInvocationRenderer() : InvocationRenderer {
             }
         }
 
-        val lastParameter = originalFunction.valueParameters.lastOrNull()
-        val varArg = lastParameter?.varargElementType != null
-        val (jsArguments, renderVararg) = if (!varArg) {
-            Pair(arguments.map { context.render(it) }, false)
-        }
-        else {
-            val lastArgument = arguments.last()
-            if (lastArgument is JsirExpression.ArrayOf) {
-                Pair((arguments.dropLast(1) + lastArgument.elements).map { context.render(it) }, false)
-            }
-            else {
-                Pair(arguments.map { context.render(it) }, true)
-            }
-        }
-
-        if (originalFunction is ConstructorDescriptor) {
-            val constructorRef = originalFunction.containingDeclaration.jsConstructor(context)
-            return if (!renderVararg) {
-                JsNew(constructorRef, jsArguments)
-            }
-            else {
-                val bind = JsNameRef("apply", JsNameRef("bind", "Function"))
-                val reference = JsInvocation(bind, constructorRef, JsArrayLiteral(listOf(JsLiteral.NULL) + jsArguments))
-                JsNew(reference)
-            }
-        }
+        val (jsArguments, renderVararg) = getCallArguments(originalFunction, arguments, context)
 
         return if (receiver == null) {
             if (!renderVararg) {
@@ -102,10 +84,46 @@ class NativeInvocationRenderer() : InvocationRenderer {
         }
         else {
             if (!renderVararg) {
-                JsInvocation(JsNameRef("call", originalFunction.jsExpression(context)), listOf(jsReceiver) + jsReceiver)
+                JsInvocation(JsNameRef("call", originalFunction.jsExpression(context)), listOf(jsReceiver) + jsArguments)
             }
             else {
                 createInvocation(originalFunction.jsExpression(context), jsReceiver, jsArguments)
+            }
+        }
+    }
+
+    override fun render(constructor: ConstructorDescriptor, arguments: List<JsirExpression>, context: JsirRenderingContext): JsExpression {
+        val originalConstructor = constructor.original
+
+        val constructorRef = originalConstructor.containingDeclaration.jsConstructor(context)
+        val (jsArguments, renderVararg) = getCallArguments(originalConstructor, arguments, context)
+        return if (!renderVararg) {
+            JsNew(constructorRef, jsArguments)
+        }
+        else {
+            val bind = JsNameRef("apply", JsNameRef("bind", "Function"))
+            val reference = JsInvocation(bind, constructorRef, JsArrayLiteral(listOf(JsLiteral.NULL) + jsArguments))
+            JsNew(reference)
+        }
+    }
+
+    private fun getCallArguments(
+            originalFunction: FunctionDescriptor,
+            arguments: List<JsirExpression>,
+            context: JsirRenderingContext
+    ): Pair<List<JsExpression>, Boolean> {
+        val lastParameter = originalFunction.valueParameters.lastOrNull()
+        val varArg = lastParameter?.varargElementType != null
+        return if (!varArg) {
+            Pair(arguments.map { context.render(it) }, false)
+        }
+        else {
+            val lastArgument = arguments.last()
+            if (lastArgument is JsirExpression.ArrayOf) {
+                Pair((arguments.dropLast(1) + lastArgument.elements).map { context.render(it) }, false)
+            }
+            else {
+                Pair(arguments.map { context.render(it) }, true)
             }
         }
     }
@@ -115,7 +133,13 @@ class NativeInvocationRenderer() : InvocationRenderer {
             name.asString()
         }
         else {
-            ManglingUtils.getSuggestedName(this)
+            val overridden = if (this is CallableMemberDescriptor) {
+                generateSequence(this) { it.overriddenDescriptors.firstOrNull() }.last().original
+            }
+            else {
+                this
+            }
+            ManglingUtils.getSuggestedName(overridden)
         }
     }
 
@@ -125,6 +149,8 @@ class NativeInvocationRenderer() : InvocationRenderer {
         val cls = containingDeclaration as? ClassDescriptor
         val root = if (AnnotationsUtils.isLibraryObject(this)) context.kotlinName().makeRef() else null
         val qualifier = cls?.let { JsNameRef(cls.name.asString(), root) } ?: root
+        if (this is ConstructorDescriptor) return qualifier!!
+
         return JsNameRef(getJsName(), qualifier)
     }
 

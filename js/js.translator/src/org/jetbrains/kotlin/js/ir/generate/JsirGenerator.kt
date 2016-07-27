@@ -236,17 +236,9 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                     }
                 }
 
-                if (primaryConstructorPsi != null) {
-                    context.generateConstructorDeclaration(primaryConstructorPsi, primaryConstructor!!) {
-                        delegationGenerator.contributeToInitializer()
-                    }
-                }
-                else if (primaryConstructor != null) {
+                if (primaryConstructor != null) {
                     context.generateConstructorDeclaration(primaryConstructorPsi, primaryConstructor) {
-                        context.nestedBlock(primaryConstructor.body) {
-                            context.synthesizeSuperCall(constructorDescriptor!!)
-                            delegationGenerator.contributeToInitializer()
-                        }
+                        delegationGenerator.contributeToInitializer()
                     }
                 }
 
