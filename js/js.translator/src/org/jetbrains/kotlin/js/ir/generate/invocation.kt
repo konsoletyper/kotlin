@@ -210,6 +210,11 @@ internal fun JsirContext.generateImplicitReceiver(receiver: ReceiverValue?) = wh
 internal fun JsirContext.generateThis(descriptor: ClassDescriptor): JsirExpression {
     val cls = classDescriptor!!
     if (cls.descriptor == descriptor) return JsirExpression.This()
+
+    if (descriptor.kind == ClassKind.OBJECT) {
+        return JsirExpression.ObjectReference(descriptor)
+    }
+
     if (cls.outer == null) return JsirExpression.ThisCapture(descriptor)
 
     var result: JsirExpression = JsirExpression.This()

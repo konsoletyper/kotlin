@@ -144,8 +144,8 @@ internal fun JsirContext.synthesizeSuperCall(descriptor: ConstructorDescriptor) 
     if (delegatedCall != null) {
         val delegatedConstructor = delegatedCall.resultingDescriptor
         val receiver = JsirExpression.This()
-        val arguments = outerParameter?.makeReference().singletonOrEmptyList() +
-                        generateArguments(delegatedCall, generateRawArguments(delegatedCall))
+        val outerReceiver = generateReceiver(delegatedCall) { outerParameter!!.makeReference() }.first
+        val arguments = outerReceiver.singletonOrEmptyList() + generateArguments(delegatedCall, generateRawArguments(delegatedCall))
         val invocation = JsirExpression.Invocation(receiver, delegatedConstructor, false, *arguments.toTypedArray())
 
         append(invocation)
@@ -155,7 +155,7 @@ internal fun JsirContext.synthesizeSuperCall(descriptor: ConstructorDescriptor) 
 internal fun JsirContext.generateAccessor(psi: KtPropertyAccessor?, accessor: VariableAccessorDescriptor?) {
     if (accessor == null) return
 
-    if (psi != null) {
+    if (psi != null && psi.bodyExpression != null) {
         generate(psi)
     }
     else {
