@@ -200,7 +200,7 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
 
         val outerClass = cls.outer
         if (outerClass != null) {
-            outerFieldNames[cls.descriptor] = program.scope.declareName("outer\$${getSuggestedName(descriptor)}")
+            outerFieldNames[cls.descriptor] = program.scope.declareName("outer\$${getSuggestedName(outerClass.descriptor)}")
         }
 
         for (delegateField in cls.delegateFields) {
@@ -627,7 +627,28 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
         return when (descriptor) {
             is PropertyGetterDescriptor -> "get_" + getSuggestedName(descriptor.correspondingProperty)
             is PropertySetterDescriptor -> "set_" + getSuggestedName(descriptor.correspondingProperty)
-            else -> if (descriptor.name.isSpecial) "f" else descriptor.name.asString()
+            is ClassDescriptor -> {
+                if (descriptor.name.isSpecial) {
+                    val superClass = descriptor.getSuperClassNotAny()
+                    val superInterfaces = descriptor.getSuperInterfaces()
+                    val additionalName = if (superClass != null) {
+                        superClass.name
+                    }
+                    else if (superInterfaces.size == 1) {
+                        superInterfaces.first().name
+                    }
+                    else {
+                        null
+                    }
+                    val additionalNameString = if (additionalName != null && !additionalName.isSpecial) additionalName.asString() else ""
+                    "anonymous\$$additionalNameString"
+                }
+                else {
+                    descriptor.name.asString()
+                }
+            }
+            is FunctionDescriptor -> if (descriptor.name.isSpecial) "lambda" else descriptor.name.asString()
+            else -> if (descriptor.name.isSpecial) "anonymous" else descriptor.name.asString()
         }
     }
 

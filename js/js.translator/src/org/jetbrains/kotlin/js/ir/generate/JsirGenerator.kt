@@ -261,7 +261,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                     { context.withInitializerBody(primaryConstructor.body, it) }
                 }
                 else {
-                    ({})
+                    ({ it() })
                 }
 
                 wrapper {
@@ -496,6 +496,12 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
 
     private fun generateQualified(expression: KtQualifiedExpression, receiverFactory: (() -> JsirExpression)?): JsirExpression {
         val selector = expression.selectorExpression
+        if (selector is KtReferenceExpression) {
+            val referenceDescriptor = context.bindingContext[BindingContext.REFERENCE_TARGET, selector]
+            if (referenceDescriptor is ClassDescriptor) {
+                return JsirExpression.ObjectReference(referenceDescriptor)
+            }
+        }
 
         return when (selector) {
             is KtCallExpression -> {
