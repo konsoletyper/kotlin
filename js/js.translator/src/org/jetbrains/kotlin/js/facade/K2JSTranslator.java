@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.js.facade;
 
 import com.google.dart.compiler.backend.js.ast.JsObjectScope;
 import com.google.dart.compiler.backend.js.ast.JsProgram;
+import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
@@ -26,9 +27,11 @@ import org.jetbrains.kotlin.js.analyzer.JsAnalysisResult;
 import org.jetbrains.kotlin.js.config.JsConfig;
 import org.jetbrains.kotlin.js.facade.exceptions.TranslationException;
 import org.jetbrains.kotlin.js.inline.JsInliner;
+import org.jetbrains.kotlin.js.ir.JsirClass;
+import org.jetbrains.kotlin.js.ir.JsirFunction;
 import org.jetbrains.kotlin.js.ir.JsirModule;
 import org.jetbrains.kotlin.js.ir.generate.JsirGenerator;
-import org.jetbrains.kotlin.js.ir.render.JsirRenderer;
+import org.jetbrains.kotlin.js.ir.render.*;
 import org.jetbrains.kotlin.js.ir.render.builtins.*;
 import org.jetbrains.kotlin.js.ir.render.nativecall.*;
 import org.jetbrains.kotlin.js.ir.transform.Transformer;
@@ -41,6 +44,8 @@ import org.jetbrains.kotlin.resolve.BindingTrace;
 import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.jetbrains.kotlin.diagnostics.DiagnosticUtils.hasError;
@@ -97,21 +102,7 @@ public final class K2JSTranslator {
         Transformer transformer = new Transformer();
         transformer.transform(pool);
 
-        JsirRenderer renderer = new JsirRenderer();
-        renderer.getInvocationRenderers().add(new EqualsRenderer());
-        renderer.getInvocationRenderers().add(new ToStringRenderer());
-        renderer.getInvocationRenderers().add(new RangeMethodRenderer());
-        renderer.getInvocationRenderers().add(new NativeInvocationRenderer());
-        renderer.getInvocationRenderers().add(new ArrayInvocationRenderer());
-        renderer.getInvocationRenderers().add(new StringLengthRenderer());
-        renderer.getInstantiationRenderers().add(new NativeInvocationRenderer());
-        renderer.getInstantiationRenderers().add(new ArrayInvocationRenderer());
-        renderer.getObjectReferenceRenderers().add(new NativeObjectReferenceRenderer());
-        renderer.getClassFilters().add(new NativeClassFilter());
-        renderer.getFunctionFilters().add(new NativeFunctionFilter());
-        renderer.getExternalNameContributors().add(new BuiltinNameContributor(
-                StandardClasses.bindImplementations(new JsObjectScope(new JsProgram("").getRootScope(), "", null))));
-        renderer.getExternalNameContributors().add(new NativeNameContributor());
+        JsirRenderer renderer = new JsirRenderer(new DefaultRenderingConfig());
         JsProgram altProgram = renderer.render(irGenerator.getContext().getModule());
         /*altProgram.getGlobalBlock().accept(new RecursiveJsVisitor() {
             @Override
@@ -131,5 +122,49 @@ public final class K2JSTranslator {
 
         List<String> importedModules = new ArrayList<String>(context.getImportedModules().keySet());
         return new TranslationResult.Success(config, files, altProgram, diagnostics, importedModules, moduleDescriptor);
+    }
+
+    private static class DefaultRenderingConfig implements JsirRenderingConfig {
+        private final BuiltinNameContributor builtinNameContributor = new BuiltinNameContributor(
+                StandardClasses.bindImplementations(new JsObjectScope(new JsProgram("").getRootScope(), "", null)));
+
+        @NotNull
+        @Override
+        public List<InvocationRenderer> getInvocationRenderers() {
+            return Arrays.asList(
+                    new EqualsRenderer(), new ToStringRenderer(), new RangeMethodRenderer(), new NativeInvocationRenderer(),
+                    new ArrayInvocationRenderer(), new StringLengthRenderer()
+            );
+        }
+
+        @NotNull
+        @Override
+        public List<InstantiationRenderer> getInstantiationRenderers() {
+            return Arrays.<InstantiationRenderer>asList(new NativeInvocationRenderer(), new ArrayInvocationRenderer());
+        }
+
+        @NotNull
+        @Override
+        public List<ObjectReferenceRenderer> getObjectReferenceRenderers() {
+            return Collections.<ObjectReferenceRenderer>singletonList(new NativeObjectReferenceRenderer());
+        }
+
+        @NotNull
+        @Override
+        public List<Function1<JsirClass, Boolean>> getClassFilters() {
+            return Collections.<Function1<JsirClass, Boolean>>singletonList(new NativeClassFilter());
+        }
+
+        @NotNull
+        @Override
+        public List<Function1<JsirFunction, Boolean>> getFunctionFilters() {
+            return Collections.<Function1<JsirFunction, Boolean>>singletonList(new NativeFunctionFilter());
+        }
+
+        @NotNull
+        @Override
+        public List<ExternalNameContributor> getExternalNameContributors() {
+            return Arrays.asList(builtinNameContributor, new NativeNameContributor());
+        }
     }
 }

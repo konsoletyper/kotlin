@@ -32,14 +32,7 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.*
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.utils.singletonOrEmptyList
 
-class JsirRenderer {
-    val invocationRenderers = mutableListOf<InvocationRenderer>()
-    val instantiationRenderers = mutableListOf<InstantiationRenderer>()
-    val objectReferenceRenderers = mutableListOf<ObjectReferenceRenderer>()
-    val classFilters = mutableListOf<(JsirClass) -> Boolean>()
-    val functionFilters = mutableListOf<(JsirFunction) -> Boolean>()
-    val externalNameContributors = mutableListOf<ExternalNameContributor>()
-
+class JsirRenderer(val config: JsirRenderingConfig) {
     fun render(module: JsirModule): JsProgram {
         val program = JsProgram("")
         val result = render(module, program)
@@ -59,14 +52,7 @@ class JsirRenderer {
     }
 
     fun render(module: JsirModule, program: JsProgram): JsirRenderingResult {
-        val rendererImpl = JsirRendererImpl(module, program).apply {
-            invocationRenderers += this@JsirRenderer.invocationRenderers
-            instantiationRenderers += this@JsirRenderer.instantiationRenderers
-            objectReferenceRenderers += this@JsirRenderer.objectReferenceRenderers
-            classFilters += this@JsirRenderer.classFilters
-            functionFilters += this@JsirRenderer.functionFilters
-            externalNameContributors += this@JsirRenderer.externalNameContributors
-        }
+        val rendererImpl = JsirRendererImpl(module, program, config)
         val wrapperFunction = rendererImpl.render()
         return JsirRenderingResult(wrapperFunction, rendererImpl.moduleNames)
     }
@@ -81,13 +67,7 @@ class JsirRenderer {
     }
 }
 
-private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
-    val invocationRenderers = mutableListOf<InvocationRenderer>()
-    val instantiationRenderers = mutableListOf<InstantiationRenderer>()
-    val objectReferenceRenderers = mutableListOf<ObjectReferenceRenderer>()
-    val classFilters = mutableListOf<(JsirClass) -> Boolean>()
-    val functionFilters = mutableListOf<(JsirFunction) -> Boolean>()
-    val externalNameContributors = mutableListOf<ExternalNameContributor>()
+private class JsirRendererImpl(val module: JsirModule, val program: JsProgram, val config: JsirRenderingConfig) {
     val invocationRendererCache = mutableMapOf<FunctionDescriptor, InvocationRenderer?>()
     val instantiationRendererCache = mutableMapOf<ConstructorDescriptor, InstantiationRenderer?>()
     val objectReferenceRendererCache = mutableMapOf<ClassDescriptor, ObjectReferenceRenderer?>()
@@ -154,7 +134,7 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
         }
 
         for (cls in file.classes.values) {
-            if (classFilters.any { !it(cls) }) continue
+            if (config.classFilters.any { !it(cls) }) continue
             renderClass(cls)
         }
 
@@ -165,7 +145,7 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
             ""
         }
         for (function in file.functions.values) {
-            if (functionFilters.any { !it(function) }) continue
+            if (config.functionFilters.any { !it(function) }) continue
             val prefix = mutableListOf<JsStatement>()
             if (file.initializerBody.isNotEmpty()) {
                 prefix += JsInvocation(pureFqn(initializerFunctionName, null)).makeStmt()
@@ -242,7 +222,7 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
         }
 
         for (function in cls.functions.values) {
-            if (functionFilters.any { !it(function) }) continue
+            if (config.functionFilters.any { !it(function) }) continue
 
             val declaration = function.descriptor
             if (declaration is ConstructorDescriptor && declaration.isPrimary) continue
@@ -384,7 +364,7 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
             val descriptor = function.descriptor
             if (descriptor is VariableAccessorDescriptor || !descriptor.isEffectivelyPublicApi) continue
             val container = descriptor.containingDeclaration as? PackageFragmentDescriptor ?: continue
-            if (functionFilters.any { !it(function) }) continue
+            if (config.functionFilters.any { !it(function) }) continue
 
             val name = ManglingUtils.getSuggestedName(descriptor)
             val jsPackage = getPackage(container.fqName)
@@ -396,7 +376,7 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
             val descriptor = cls.descriptor
             if (descriptor.containingDeclaration !is PackageFragmentDescriptor) continue
             if (!descriptor.isEffectivelyPublicApi) continue
-            if (classFilters.any { !it(cls) }) continue
+            if (config.classFilters.any { !it(cls) }) continue
 
             val name = ManglingUtils.getSuggestedName(descriptor)
             val container = descriptor.containingDeclaration
@@ -453,7 +433,7 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
         val descriptor = property.descriptor
         for (accessor in descriptor.getter.singletonOrEmptyList() + descriptor.setter.singletonOrEmptyList()) {
             val function = file.functions[accessor]
-            if (function != null && functionFilters.any { !it(function) }) return false
+            if (function != null && config.functionFilters.any { !it(function) }) return false
         }
         return true
     }
@@ -491,7 +471,7 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
             return getExternalName(DescriptorUtils.getContainingModule(descriptor))
         }
 
-        val contributedName = externalNameContributors.asSequence()
+        val contributedName = config.externalNameContributors.asSequence()
                 .map { it.contribute(descriptor, globalContext) }
                 .firstOrNull { it != null }
         if (contributedName != null) return contributedName
@@ -700,15 +680,15 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
         override fun getNumberLiteral(value: Double): JsNumberLiteral = program.getNumberLiteral(value)
 
         override fun getInvocationRenderer(function: FunctionDescriptor) = invocationRendererCache.getOrPut(function) {
-            invocationRenderers.firstOrNull { it.isApplicable(function) }
+            config.invocationRenderers.firstOrNull { it.isApplicable(function) }
         }
 
         override fun getInstantiationRenderer(constructor: ConstructorDescriptor) = instantiationRendererCache.getOrPut(constructor) {
-            instantiationRenderers.firstOrNull { it.isApplicable(constructor) }
+            config.instantiationRenderers.firstOrNull { it.isApplicable(constructor) }
         }
 
         override fun getObjectReferenceRenderer(cls: ClassDescriptor) = objectReferenceRendererCache.getOrPut(cls) {
-            objectReferenceRenderers.firstOrNull { it.isApplicable(cls) }
+            config.objectReferenceRenderers.firstOrNull { it.isApplicable(cls) }
         }
 
         override fun getFreeVariables(function: JsirFunction) = freeVariablesByFunction[function].orEmpty()
