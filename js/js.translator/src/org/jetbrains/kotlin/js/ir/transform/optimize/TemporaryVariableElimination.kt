@@ -340,6 +340,7 @@ private class Implementation(val variableContainer: JsirVariableContainer, val b
 
                 is JsirExpression.Undefined,
                 is JsirExpression.This,
+                is JsirExpression.ThisCapture,
                 is JsirExpression.Constant -> false
             }
         }

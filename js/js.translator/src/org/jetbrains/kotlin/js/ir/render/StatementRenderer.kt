@@ -407,6 +407,11 @@ class StatementRenderer(val context: JsirRenderingContext) {
         is JsirExpression.PrimitiveCast -> {
             primitiveCast(render(expression.value), expression.sourceType, expression.targetType)
         }
+
+        is JsirExpression.ThisCapture -> {
+            error("Can't lower ThisCapture expression to JavaScript. It should have been eliminated before lowering." +
+                  (expression.source?.getTextWithLocation()?.let { " Approximate position is: $it"  } ?: ""))
+        }
     }
 
     private fun JsirBinaryOperation.asJs() = when (this) {

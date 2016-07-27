@@ -26,7 +26,6 @@ import org.jetbrains.kotlin.psi.psiUtil.getTextWithLocation
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.BindingContextUtils
 import org.jetbrains.kotlin.resolve.BindingTrace
-import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.constants.NullValue
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator
@@ -42,7 +41,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
 
     override fun visitKtElement(expression: KtElement, context: JsirContext): JsirExpression {
         bindingTrace.report(ErrorsJs.NOT_SUPPORTED.on(expression, expression))
-        return JsirExpression.Undefined
+        return JsirExpression.Undefined()
     }
 
     override fun visitConstantExpression(expression: KtConstantExpression, context: JsirContext): JsirExpression {
@@ -97,7 +96,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             }
         }
         else {
-            JsirExpression.Undefined
+            JsirExpression.Undefined()
         }
     }
 
@@ -107,7 +106,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             val target = getNonLocalReturnTarget(expression) ?: context.function!!.descriptor
             context.append(JsirStatement.Return(returnValue, target))
         }
-        return JsirExpression.Undefined
+        return JsirExpression.Undefined()
     }
 
     override fun visitBreakExpression(expression: KtBreakExpression, data: JsirContext?): JsirExpression {
@@ -115,7 +114,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             val target = expression.getTargetLabel()?.let { context.getLabelTarget(it) } ?: context.defaultBreakTarget
             context.append(JsirStatement.Break(target!!))
         }
-        return JsirExpression.Undefined
+        return JsirExpression.Undefined()
     }
 
     override fun visitContinueExpression(expression: KtContinueExpression, data: JsirContext?): JsirExpression {
@@ -129,7 +128,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                 JsirStatement.Continue(target)
             })
         }
-        return JsirExpression.Undefined
+        return JsirExpression.Undefined()
     }
 
     override fun visitLabeledExpression(expression: KtLabeledExpression, data: JsirContext?): JsirExpression {
@@ -174,7 +173,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             expressionInside.accept(this, context)
         }
         else {
-            JsirExpression.Undefined
+            JsirExpression.Undefined()
         }
     }
 
@@ -201,13 +200,13 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             }
         }
 
-        return JsirExpression.Undefined
+        return JsirExpression.Undefined()
     }
 
     override fun visitClassOrObject(psi: KtClassOrObject, data: JsirContext): JsirExpression {
         val descriptor = BindingUtils.getDescriptorForElement(context.bindingContext, psi) as ClassDescriptor
         generateClass(psi, descriptor)
-        return JsirExpression.Undefined
+        return JsirExpression.Undefined()
     }
 
     override fun visitObjectLiteralExpression(psi: KtObjectLiteralExpression, data: JsirContext?): JsirExpression {
@@ -218,13 +217,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     private fun generateClass(psi: KtClassOrObject, descriptor: ClassDescriptor) {
-        val isInner = descriptor.isInner || DescriptorUtils.isDescriptorWithLocalVisibility(descriptor) && context.classDescriptor != null
-        val outerClass = if (isInner) {
-            context.classDescriptor
-        }
-        else {
-            null
-        }
+        val outerClass = if (descriptor.isInner) context.classDescriptor else null
         val cls = JsirClass(descriptor, context.file!!, outerClass)
         val delegationGenerator = DelegationGenerator(context, psi, cls)
         context.nestedClass(cls) {
@@ -327,7 +320,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             if (initializer != null) {
                 context.nestedBlock(context.initializerBody!!) {
                     val container = variable.containingDeclaration
-                    val receiver = if (container is ClassDescriptor) JsirExpression.This else null
+                    val receiver = if (container is ClassDescriptor) JsirExpression.This() else null
                     val access = JsirExpression.FieldAccess(receiver, JsirField.Backing(variable))
                     context.assign(access, context.generate(initializer))
                 }
@@ -336,7 +329,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
             context.generateAccessor(propertyPsi.getter, variable.getter)
             context.generateAccessor(propertyPsi.setter, variable.setter)
         }
-        return JsirExpression.Undefined
+        return JsirExpression.Undefined()
     }
 
     override fun visitIfExpression(expression: KtIfExpression, data: JsirContext): JsirExpression {
@@ -380,7 +373,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         }
         context.append(statement)
 
-        return JsirExpression.Undefined
+        return JsirExpression.Undefined()
     }
 
     override fun visitDoWhileExpression(expression: KtDoWhileExpression, data: JsirContext) = generateDoWhile(expression, null)
@@ -407,7 +400,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
         }
         context.append(statement)
 
-        return JsirExpression.Undefined
+        return JsirExpression.Undefined()
     }
 
     override fun visitForExpression(expression: KtForExpression, data: JsirContext?): JsirExpression {
@@ -461,7 +454,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
     }
 
     override fun visitThisExpression(expression: KtThisExpression, data: JsirContext?): JsirExpression {
-        val resolvedCall = expression.getResolvedCall(context.bindingContext) ?: return JsirExpression.This
+        val resolvedCall = expression.getResolvedCall(context.bindingContext) ?: return JsirExpression.This()
 
         val descriptor = (resolvedCall.resultingDescriptor as ReceiverParameterDescriptor).containingDeclaration
         return when (descriptor) {
@@ -473,7 +466,7 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
 
     override fun visitThrowExpression(expression: KtThrowExpression, data: JsirContext?): JsirExpression {
         context.append(JsirStatement.Throw(context.memoize(expression.thrownExpression!!)))
-        return JsirExpression.Undefined
+        return JsirExpression.Undefined()
     }
 
     override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression, data: JsirContext?): JsirExpression {
@@ -532,6 +525,6 @@ class JsirGenerator(private val bindingTrace: BindingTrace, module: ModuleDescri
                 context.append(context.generate(body))
             }
         }
-        return JsirExpression.Undefined
+        return JsirExpression.Undefined()
     }
 }

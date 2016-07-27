@@ -124,6 +124,7 @@ fun <S, E> JsirExpression.visit(visitor: JsirVisitor<S, E>): E = visitor.accept(
     is JsirExpression.ObjectReference,
     is JsirExpression.Constant,
     is JsirExpression.This,
+    is JsirExpression.ThisCapture,
     is JsirExpression.Undefined -> ({ })
 })
 
@@ -210,6 +211,7 @@ fun JsirExpression.replace(mapper: JsirMapper): JsirExpression = when (this) {
     is JsirExpression.Constant,
     is JsirExpression.Undefined,
     is JsirExpression.This,
+    is JsirExpression.ThisCapture,
     is JsirExpression.NewNullPointerExpression,
     is JsirExpression.FunctionReference,
     is JsirExpression.ObjectReference,

@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.js.ir.generate
 
+import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.js.ir.*
 import org.jetbrains.kotlin.psi.KtExpression
 
@@ -28,7 +29,7 @@ fun JsirContext.memoize(expression: JsirExpression) = when (expression) {
     else -> {
         val temporary = newTemporary()
         assign(temporary.makeReference(), expression)
-        temporary.makeReference()
+        temporary.makeReference().apply { source = currentSource }
     }
 }
 
@@ -110,3 +111,37 @@ fun JsirContext.requireNonNull(value: JsirExpression): JsirExpression {
 }
 
 fun JsirContext.newTemporary() = variableContainer!!.createVariable(true)
+
+fun JsirExpression.applySource(source: PsiElement?): JsirExpression {
+    if (source != null) {
+        visit(SourceUpdateVisitor(source))
+    }
+    return this
+}
+
+fun JsirExpression.applySource(context: JsirContext) = applySource(context.currentSource)
+
+fun JsirStatement.applySource(source: PsiElement?): JsirStatement {
+    if (source != null) {
+        visit(SourceUpdateVisitor(source))
+    }
+    return this
+}
+
+fun JsirStatement.applySource(context: JsirContext) = applySource(context.currentSource)
+
+private class SourceUpdateVisitor(val source: PsiElement) : JsirVisitor<Unit, Unit> {
+    override fun accept(statement: JsirStatement, inner: () -> Unit) {
+        if (statement.source == null) {
+            statement.source = source
+            inner()
+        }
+    }
+
+    override fun accept(expression: JsirExpression, inner: () -> Unit) {
+        if (expression.source == null) {
+            expression.source = source
+            inner()
+        }
+    }
+}

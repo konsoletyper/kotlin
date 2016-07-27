@@ -96,7 +96,7 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
     val descriptorToFunction: Map<FunctionDescriptor, JsirFunction>
     val delegateFieldNames = mutableMapOf<JsirField.Delegate, JsName>()
     val outerFieldNames = mutableMapOf<ClassDescriptor, JsName>()
-    val closureFieldNames = mutableMapOf<JsirVariable, JsName>()
+    val closureFieldNames = mutableMapOf<JsirField.Closure, JsName>()
     val rootNamespace = Namespace()
     val globalContext = Context(wrapperFunction, rootNamespace)
 
@@ -569,7 +569,7 @@ private class JsirRendererImpl(val module: JsirModule, val program: JsProgram) {
         is JsirField.Backing -> getInternalName(field.property)
         is JsirField.OuterClass -> outerFieldNames[field.classDescriptor]!!
         is JsirField.Delegate -> delegateFieldNames[field]!!
-        is JsirField.Closure -> closureFieldNames[field.variable]!!
+        is JsirField.Closure -> closureFieldNames[field]!!
     }
 
     private fun generateInternalName(descriptor: DeclarationDescriptor): JsName {

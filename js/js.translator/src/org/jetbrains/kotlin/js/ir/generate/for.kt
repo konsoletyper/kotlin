@@ -51,14 +51,14 @@ fun JsirContext.generateFor(psi: KtForExpression, label: String?): JsirExpressio
     }
 
     append(statement)
-    return JsirExpression.Undefined
+    return JsirExpression.Undefined()
 }
 
 private fun JsirContext.generateIterator(rangePsi: KtExpression, statement: JsirStatement.For): JsirExpression {
     val iteratorCall = bindingContext[BindingContext.LOOP_RANGE_ITERATOR_RESOLVED_CALL, rangePsi]!!
 
     val iteratorStatements = mutableListOf<JsirStatement>()
-    var iterator: JsirExpression = JsirExpression.Undefined
+    var iterator: JsirExpression = JsirExpression.Undefined()
     nestedBlock(iteratorStatements) {
         iterator = memoize(generateInvocation(iteratorCall) { generate(rangePsi) })
     }

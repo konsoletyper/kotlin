@@ -28,7 +28,6 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
     private var resultingStatements = mutableListOf<JsirStatement>()
     private val localVariables = mutableMapOf<VariableDescriptor, JsirVariable>()
     private var declaredLocalVariables = mutableSetOf<VariableDescriptor>()
-    private var currentSource: PsiElement? = null
     private val labeledStatements = mutableMapOf<String, JsirLabeled>()
     private val continueReplacementsImpl = mutableMapOf<JsirLabeled, JsirLabeled>()
     private val extensionParametersImpl = mutableMapOf<FunctionDescriptor, JsirVariable?>()
@@ -85,12 +84,16 @@ class JsirContext(val bindingTrace: BindingTrace, module: ModuleDescriptor, val 
         get
         private set
 
+    var currentSource: PsiElement? = null
+        get
+        private set
+
     fun append(statement: JsirStatement): JsirContext {
         if (resultingStatements.isNotEmpty() && isTerminalStatement(resultingStatements.last())) {
             return this
         }
 
-        resultingStatements.add(statement.apply { source = currentSource })
+        resultingStatements.add(statement.applySource(this))
         return this
     }
 

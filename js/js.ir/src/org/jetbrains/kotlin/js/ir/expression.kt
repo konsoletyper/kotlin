@@ -28,9 +28,11 @@ sealed class JsirExpression {
 
     class Constant(var value: Any?) : JsirExpression()
 
-    object This : JsirExpression()
+    class This : JsirExpression()
 
-    object Undefined : JsirExpression()
+    class ThisCapture(var target: ClassDescriptor) : JsirExpression()
+
+    class Undefined : JsirExpression()
 
     class VariableReference(var variable: JsirVariable) : JsirExpression()
 
@@ -140,7 +142,7 @@ sealed class JsirField {
 
     class OuterClass(val classDescriptor: ClassDescriptor) : JsirField()
 
-    class Closure(val variable: JsirVariable) : JsirField()
+    class Closure(val suggestedName: String?) : JsirField()
 
     class Delegate(val suggestedName: String?) : JsirField()
 }

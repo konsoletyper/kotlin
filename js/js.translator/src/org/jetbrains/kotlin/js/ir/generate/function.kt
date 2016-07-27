@@ -49,7 +49,7 @@ internal fun JsirContext.generateFunctionDeclaration(functionPsi: KtDeclarationW
         generateParameters(functionPsi, function)
 
         nestedBlock(function.body) {
-            val returnValue = functionPsi.bodyExpression?.let { generate(it) } ?: JsirExpression.Undefined
+            val returnValue = functionPsi.bodyExpression?.let { generate(it) } ?: JsirExpression.Undefined()
 
             if (descriptor !is ConstructorDescriptor) {
                 append(JsirStatement.Return(returnValue, descriptor))
@@ -98,7 +98,7 @@ internal fun JsirContext.generateConstructorDeclaration(
                 if (descriptor.isPrimary && needsOuterField) {
                     nestedBlock(function.body) {
                         val fieldRef = JsirExpression.FieldAccess(
-                                JsirExpression.This,
+                                JsirExpression.This(),
                                 JsirField.OuterClass(descriptor.containingDeclaration))
                         assign(fieldRef, outerParameter.makeReference())
                     }
@@ -109,7 +109,7 @@ internal fun JsirContext.generateConstructorDeclaration(
                     val parameter = BindingUtils.getDescriptorForElement(bindingContext, parameterPsi) as ValueParameterDescriptor
                     val property = bindingContext[BindingContext.VALUE_PARAMETER_AS_PROPERTY, parameter]
                     if (property != null) {
-                        val fieldRef = JsirExpression.FieldAccess(JsirExpression.This, JsirField.Backing(property))
+                        val fieldRef = JsirExpression.FieldAccess(JsirExpression.This(), JsirField.Backing(property))
                         assign(fieldRef, getVariable(parameter).get())
                     }
                 }
@@ -143,7 +143,7 @@ internal fun JsirContext.synthesizeSuperCall(descriptor: ConstructorDescriptor) 
     val delegatedCall = bindingContext[BindingContext.CONSTRUCTOR_RESOLVED_DELEGATION_CALL, descriptor]
     if (delegatedCall != null) {
         val delegatedConstructor = delegatedCall.resultingDescriptor
-        val receiver = JsirExpression.This
+        val receiver = JsirExpression.This()
         val arguments = outerParameter?.makeReference().singletonOrEmptyList() +
                         generateArguments(delegatedCall, generateRawArguments(delegatedCall))
         val invocation = JsirExpression.Invocation(receiver, delegatedConstructor, false, *arguments.toTypedArray())
@@ -163,7 +163,7 @@ internal fun JsirContext.generateAccessor(psi: KtPropertyAccessor?, accessor: Va
         val isGetter = accessor.valueParameters.isEmpty()
         val container = accessor.correspondingVariable.containingDeclaration
         val receiver = if (container is ClassDescriptor) {
-            JsirExpression.This
+            JsirExpression.This()
         }
         else {
             null

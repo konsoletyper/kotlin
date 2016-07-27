@@ -60,7 +60,7 @@ internal class DelegationGenerator(val context: JsirContext, val psi: KtClassOrO
             if (field is JsirField.Delegate) {
                 context.withSource(specifier) {
                     val expression = specifier.delegateExpression!!
-                    context.assign(JsirExpression.FieldAccess(JsirExpression.This, field), context.generate(expression))
+                    context.assign(JsirExpression.FieldAccess(JsirExpression.This(), field), context.generate(expression))
                 }
             }
         }
@@ -113,7 +113,7 @@ internal class DelegationGenerator(val context: JsirContext, val psi: KtClassOrO
                                  descriptor.valueParameters.map { context.getVariable(it).localVariable }
                 function.parameters += parameters.map { JsirParameter(it) }
                 val arguments = parameters.map { it.makeReference() }.toTypedArray()
-                val receiver = JsirExpression.FieldAccess(JsirExpression.This, field)
+                val receiver = JsirExpression.FieldAccess(JsirExpression.This(), field)
                 val invocation = JsirExpression.Invocation(receiver, overriddenDescriptor, true, *arguments)
                 context.append(JsirStatement.Return(invocation, descriptor))
             }

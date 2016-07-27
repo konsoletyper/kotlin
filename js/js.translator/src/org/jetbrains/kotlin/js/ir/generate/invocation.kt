@@ -97,7 +97,7 @@ internal fun JsirContext.generateArguments(
                 memoize(argument[0])
             }
             else {
-                JsirExpression.Undefined
+                JsirExpression.Undefined()
             }
         }
         else {
@@ -148,7 +148,7 @@ internal fun JsirContext.generateVariable(resolvedCall: ResolvedCall<*>, receive
 
 private fun JsirContext.generateBackingField(descriptor: SyntheticFieldDescriptor): VariableAccessor {
     val property = descriptor.propertyDescriptor
-    val receiver = if (property.containingDeclaration is ClassDescriptor) JsirExpression.This else null
+    val receiver = if (property.containingDeclaration is ClassDescriptor) JsirExpression.This() else null
     val fieldAccess = JsirExpression.FieldAccess(receiver, JsirField.Backing(descriptor.propertyDescriptor))
     return object : VariableAccessor {
         override fun get() = fieldAccess
@@ -208,17 +208,21 @@ internal fun JsirContext.generateImplicitReceiver(receiver: ReceiverValue?) = wh
 }
 
 internal fun JsirContext.generateThis(descriptor: ClassDescriptor): JsirExpression {
-    var result: JsirExpression = JsirExpression.This
-    var currentClass = classDescriptor!!.descriptor
+    val cls = classDescriptor!!
+    if (cls.descriptor == descriptor) return JsirExpression.This()
+    if (cls.outer == null) return JsirExpression.ThisCapture(descriptor)
+
+    var result: JsirExpression = JsirExpression.This()
+    var currentClassDescriptor = cls.descriptor
     val outerParameter = this.outerParameter
-    while (currentClass != descriptor) {
-        result = if (result == JsirExpression.This && outerParameter != null) {
-            outerParameter.makeReference()
+    while (currentClassDescriptor != descriptor) {
+        result = if (result == JsirExpression.This() && outerParameter != null) {
+            outerParameter.makeReference().apply { source = currentSource }
         }
         else {
-            JsirExpression.FieldAccess(result, JsirField.OuterClass(currentClass))
+            JsirExpression.FieldAccess(result, JsirField.OuterClass(currentClassDescriptor)).apply { source = currentSource }
         }
-        currentClass = DescriptorUtils.getParentOfType(currentClass, ClassDescriptor::class.java, true)!!
+        currentClassDescriptor = DescriptorUtils.getParentOfType(currentClassDescriptor, ClassDescriptor::class.java, true)!!
     }
     return result
 }

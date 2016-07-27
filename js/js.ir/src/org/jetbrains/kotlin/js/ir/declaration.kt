@@ -66,7 +66,7 @@ class JsirProperty(val descriptor: VariableDescriptorWithAccessors, val containe
 }
 
 class JsirClass(val descriptor: ClassDescriptor, val file: JsirFile, val outer: JsirClass?) : JsirContainer() {
-    val closureFields = mutableSetOf<JsirVariable>()
+    val closureFields = mutableSetOf<JsirField.Closure>()
     val delegateFields = mutableSetOf<JsirField.Delegate>()
 
     val innerClasses: Set<JsirClass>

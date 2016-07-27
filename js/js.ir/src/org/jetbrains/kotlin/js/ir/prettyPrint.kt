@@ -16,6 +16,8 @@
 
 package org.jetbrains.kotlin.js.ir
 
+import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
+
 fun JsirFunction.prettyPrint(): String {
     val writer = SourceWriter()
     val params = "(" + parameters.asSequence().map { writer.getVariable(it.variable) }.joinToString(" ") + ")"
@@ -255,6 +257,10 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
         })
     }
 
+    is JsirExpression.ThisCapture -> {
+        writer.constant("(this-capture '${target.fqNameSafe.asString()}')")
+    }
+
     is JsirExpression.Undefined -> writer.constant("undefined")
     is JsirExpression.This -> writer.constant("this")
     is JsirExpression.VariableReference -> writer.constant("(var ${writer.getVariable(variable)})")
@@ -265,7 +271,7 @@ private fun JsirExpression.prettyPrint(writer: SourceWriter): Unit = when (this)
 private fun JsirField.prettyPrint(writer: SourceWriter) = when (this) {
     is JsirField.Backing -> property.name.toString()
     is JsirField.OuterClass -> "\$outer"
-    is JsirField.Closure -> "closure\$${writer.getVariable(variable)}"
+    is JsirField.Closure -> "closure\$${suggestedName ?: "anonymous"}"
     is JsirField.Delegate -> "delegate\$${suggestedName ?: "anonymous"}"
 }
 
